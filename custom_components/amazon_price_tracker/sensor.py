@@ -64,6 +64,15 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                 except (ValueError, TypeError):
                     pass
 
+        # Seed min_price from the coordinator data that was already fetched during
+        # async_config_entry_first_refresh() — _handle_coordinator_update won't fire
+        # for data that arrived before the sensor subscribed.
+        if self._min_price is None and self.coordinator.data is not None:
+            price = self.coordinator.data.get("price")
+            if price is not None:
+                self._min_price = price
+                self._min_price_date = datetime.utcnow().isoformat()
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update min_price when new coordinator data arrives, then propagate."""
