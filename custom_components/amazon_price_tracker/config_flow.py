@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+
+import httpx
+import voluptuous as vol
+
+from homeassistant import config_entries
+from homeassistant.data_entry_flow import FlowResult
+
+from .const import DOMAIN, HEADERS
+
+_LOGGER = logging.getLogger(__name__)
+
+_ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
+
+_STEP_USER_SCHEMA = vol.Schema(
+    {
+        vol.Required("asin"): str,
+        vol.Required("name"): str,
+        vol.Optional("alert_threshold"): vol.Coerce(float),
+    }
+)
+
+
+def _validate_asin(raw: str) -> str:
+    asin = raw.strip().upper()
+    if not _ASIN_RE.match(asin):
+        raise ValueError(f"Invalid ASIN: {raw!r}")
+    return asin
+
+
+class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    VERSION = 1
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # 1. Validate ASIN format
+            try:
+                asin = _validate_asin(user_input["asin"])
+            except ValueError:
+                errors["asin"] = "invalid_asin"
+            else:
+                # 2. Prevent duplicates
+                await self.async_set_unique_id(asin)
+                self._abort_if_unique_id_configured()
+
+                # 3. Light connectivity check — verifies Amazon.it is reachable
+                #    and the ASIN path returns HTTP 200
+                if not await self._check_reachable(asin):
+                    errors["base"] = "cannot_connect"
+
+            if not errors:
+                name = user_input["name"].strip()
+                alert_threshold = user_input.get("alert_threshold")
+                return self.async_create_entry(
+                    title=name,
+                    data={
+                        "asin": asin,
+                        "name": name,
+                        "alert_threshold": alert_threshold,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_STEP_USER_SCHEMA,
+            errors=errors,
+        )
+
+    async def _check_reachable(self, asin: str) -> bool:
+        """Return True if amazon.it responds 200 for this ASIN path."""
+        url = f"https://www.amazon.it/dp/{asin}"
+        try:
+            async with httpx.AsyncClient(
+                headers=HEADERS,
+                follow_redirects=True,
+                timeout=httpx.Timeout(10.0),
+            ) as client:
+                response = await client.get(url)
+                # 200 even on CAPTCHA pages — we accept it; parsing issues surface later
+                return response.status_code == 200
+        except httpx.HTTPError as err:
+            _LOGGER.warning("Connectivity check failed for %s: %s", asin, err)
+            return False

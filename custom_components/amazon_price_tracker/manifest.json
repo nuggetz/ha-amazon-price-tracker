@@ -1,0 +1,15 @@
+{
+  "domain": "amazon_price_tracker",
+  "name": "Amazon Price Tracker",
+  "version": "0.1.0",
+  "documentation": "https://github.com/nuggetz/ha-amazon-price-tracker",
+  "issue_tracker": "https://github.com/nuggetz/ha-amazon-price-tracker/issues",
+  "requirements": [
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0"
+  ],
+  "dependencies": [],
+  "codeowners": ["@nuggetz"],
+  "iot_class": "cloud_polling",
+  "config_flow": true
+}

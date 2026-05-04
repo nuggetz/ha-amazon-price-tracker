@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Aggiungi prodotto Amazon",
+        "description": "Inserisci i dati del prodotto da monitorare.",
+        "data": {
+          "asin": "ASIN",
+          "name": "Nome personalizzato",
+          "alert_threshold": "Soglia prezzo alert in EUR (opzionale)"
+        },
+        "data_description": {
+          "asin": "Codice ASIN di 10 caratteri (es. B09FKN79QR)",
+          "name": "Nome che verrà mostrato in Home Assistant",
+          "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni"
+        }
+      }
+    },
+    "error": {
+      "invalid_asin": "ASIN non valido. Deve essere esattamente 10 caratteri alfanumerici (A-Z, 0-9).",
+      "already_configured": "Questo ASIN è già monitorato.",
+      "cannot_connect": "Impossibile raggiungere Amazon.it. Controlla la connessione di rete."
+    },
+    "abort": {
+      "already_configured": "Questo ASIN è già configurato."
+    }
+  }
+}
