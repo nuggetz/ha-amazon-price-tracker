@@ -40,7 +40,7 @@
       "invalid_asin": "ASIN non valido. Deve essere esattamente 10 caratteri alfanumerici (A-Z, 0-9).",
       "already_configured": "Questo ASIN è già monitorato.",
       "cannot_connect": "Impossibile raggiungere Amazon. Controlla la connessione di rete.",
-      "invalid_wishlist_url": "URL non valido. Usa il formato: https://www.amazon.it/hz/wishlist/ls/XXXX",
+      "invalid_wishlist_url": "URL della lista desideri non valido. Assicurati di copiare l'URL completo della lista pubblica Amazon.",
       "wishlist_not_found": "Lista desideri non trovata o impostata come Privata su Amazon.",
       "wishlist_empty": "Nessun prodotto trovato nella lista. La lista potrebbe essere vuota o privata."
     },
