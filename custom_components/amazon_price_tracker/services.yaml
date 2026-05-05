@@ -1,0 +1,11 @@
+force_refresh:
+  name: Force refresh
+  description: >
+    Immediately fetch the latest price from Amazon.it for one or more
+    tracked products, without waiting for the next scheduled poll.
+    If no entity is specified, all tracked products are refreshed.
+  target:
+    entity:
+      domain: sensor
+      integration: amazon_price_tracker
+  fields: {}
