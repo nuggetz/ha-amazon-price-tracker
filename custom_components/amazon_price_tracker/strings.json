@@ -31,7 +31,7 @@
           "alert_threshold": "Soglia prezzo alert per tutti i prodotti (opzionale)"
         },
         "data_description": {
-          "url": "URL completo della lista desideri pubblica (es. https://www.amazon.it/hz/wishlist/ls/XXXX). La lista deve essere impostata come Pubblica su Amazon.",
+          "url": "URL completo della lista desideri pubblica. La lista deve essere impostata come Pubblica su Amazon.",
           "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito."
         }
       }

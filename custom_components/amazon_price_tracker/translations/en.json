@@ -31,7 +31,7 @@
           "alert_threshold": "Price alert threshold for all products (optional)"
         },
         "data_description": {
-          "url": "Full URL of the public wishlist (e.g. https://www.amazon.it/hz/wishlist/ls/XXXX). The wishlist must be set to Public on Amazon.",
+          "url": "Full URL of the public wishlist. The wishlist must be set to Public on Amazon.",
           "alert_threshold": "Threshold applied to all imported products. Can be changed per-product later."
         }
       }
