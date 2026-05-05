@@ -1,7 +1,7 @@
 force_refresh:
   name: Force refresh
   description: >
-    Immediately fetch the latest price from Amazon.it for one or more
+    Immediately fetch the latest price from Amazon for one or more
     tracked products, without waiting for the next scheduled poll.
     If no entity is specified, all tracked products are refreshed.
   target:
@@ -9,3 +9,48 @@ force_refresh:
       domain: sensor
       integration: amazon_price_tracker
   fields: {}
+
+import_wishlist:
+  name: Import from wishlist
+  description: >
+    Import all products from a public Amazon wishlist. One tracked sensor
+    is created per product found. Products already configured are skipped
+    automatically. The wishlist must be set to Public on Amazon.
+  fields:
+    url:
+      name: Wishlist URL
+      description: Full URL of the public Amazon wishlist.
+      required: true
+      example: "https://www.amazon.it/hz/wishlist/ls/XXXXXXXXXXXXXXXX"
+      selector:
+        text:
+    marketplace:
+      name: Marketplace override
+      description: >
+        Force a specific marketplace. Leave empty to auto-detect from the
+        wishlist URL (recommended).
+      required: false
+      selector:
+        select:
+          options:
+            - "amazon.it"
+            - "amazon.de"
+            - "amazon.fr"
+            - "amazon.es"
+            - "amazon.nl"
+            - "amazon.be"
+            - "amazon.pl"
+            - "amazon.se"
+            - "amazon.co.uk"
+            - "amazon.com"
+    alert_threshold:
+      name: Default price alert threshold
+      description: >
+        Optional price threshold applied to all imported products.
+        Can be changed per-product later via the Configure button.
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.01
+          mode: box

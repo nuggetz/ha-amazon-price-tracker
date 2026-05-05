@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from datetime import datetime, timedelta
 
 import httpx
@@ -25,11 +26,15 @@ from .const import (
     PRICE_SELECTORS,
     REQUEST_TIMEOUT,
     TITLE_SELECTORS,
+    USED_PRICE_SELECTORS,
+    WISHLIST_ID_RE,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 _CURRENCY_SYMBOLS = ("€", "£", "$", "kr", "zł", "EUR", "GBP", "USD", "PLN", "SEK")
+_ASIN_IN_HREF_RE = re.compile(r"/dp/([A-Z0-9]{10})")
+_WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
 
 class AmazonCaptchaError(Exception):
@@ -60,10 +65,10 @@ def parse_price(raw: str, european_format: bool = True) -> float | None:
 
 def parse_product_page(
     html: str, asin: str, european_format: bool = True
-) -> tuple[float | None, str | None, bool, str | None]:
+) -> tuple[float | None, str | None, bool, str | None, float | None]:
     """Parse an Amazon product page.
 
-    Returns (price, title, is_available, availability_text).
+    Returns (price, title, is_available, availability_text, used_price).
     Runs synchronously — must be called via async_add_executor_job.
     Raises AmazonCaptchaError if a CAPTCHA wall is detected.
     """
@@ -127,7 +132,6 @@ def parse_product_page(
         if whole_el and frac_el:
             whole = whole_el.get_text(strip=True).rstrip(",. ")
             frac = frac_el.get_text(strip=True).strip()
-            # Strip thousands separators from the whole part
             if european_format:
                 whole = whole.replace(".", "").replace(",", "").replace(" ", "")
             else:
@@ -147,6 +151,16 @@ def parse_product_page(
                     title = candidate
                     break
 
+    # --- Used price (optional, present only when third-party used offers exist) ---
+    used_price: float | None = None
+    for selector in USED_PRICE_SELECTORS:
+        el = soup.select_one(selector)
+        if el:
+            candidate = parse_price(el.get_text(strip=True), european_format)
+            if candidate is not None:
+                used_price = candidate
+                break
+
     if price is None and is_available:
         _LOGGER.warning(
             "Could not parse price for ASIN %s — page snippet: %.300s",
@@ -154,7 +168,50 @@ def parse_product_page(
             html,
         )
 
-    return price, title, is_available, availability_text
+    return price, title, is_available, availability_text, used_price
+
+
+def parse_wishlist_page(html: str) -> list[dict]:
+    """Parse a public Amazon wishlist page and return list of {asin, name}.
+
+    Runs synchronously — must be called via async_add_executor_job.
+    Returns an empty list if the wishlist is private or contains no parseable items.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    products: list[dict] = []
+    seen: set[str] = set()
+
+    for item in soup.find_all("li", class_="g-item-sortable"):
+        asin: str | None = None
+        name: str | None = None
+
+        # Primary: structured data in data-reposition-action-params JSON
+        raw_params = item.get("data-reposition-action-params")
+        if raw_params:
+            try:
+                params = json.loads(raw_params)
+                external_id = params.get("itemExternalId", "")
+                # Format: "ASIN:B095PV5G87|A1F83G8C2ARO7P"
+                if external_id.startswith("ASIN:"):
+                    asin = external_id.split(":")[1].split("|")[0]
+            except (json.JSONDecodeError, IndexError):
+                pass
+
+        # Fallback: parse ASIN from the itemName link href
+        name_link = item.select_one("a[id^='itemName_']")
+        if name_link:
+            name = (name_link.get("title") or name_link.get_text(strip=True)) or None
+            if asin is None:
+                href = name_link.get("href", "")
+                match = _ASIN_IN_HREF_RE.search(href)
+                if match:
+                    asin = match.group(1)
+
+        if asin and asin not in seen:
+            seen.add(asin)
+            products.append({"asin": asin, "name": name or asin})
+
+    return products
 
 
 class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
@@ -211,7 +268,7 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(f"Network error for {self.asin}: {err}") from err
 
         try:
-            price, title, is_available, availability_text = (
+            price, title, is_available, availability_text, used_price = (
                 await self.hass.async_add_executor_job(
                     parse_product_page, response.text, self.asin, european_format
                 )
@@ -230,4 +287,5 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             "last_updated": datetime.utcnow(),
             "is_available": is_available,
             "availability_text": availability_text,
+            "used_price": used_price,
         }

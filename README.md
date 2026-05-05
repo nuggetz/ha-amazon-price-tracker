@@ -89,12 +89,31 @@ Each product creates one sensor entity under a dedicated device.
 | `min_price_date` | `str ISO` | Date the minimum was recorded |
 | `is_available` | `bool` | `false` when the product is out of stock |
 | `availability_text` | `str` | Raw stock message from Amazon (e.g. "Only 2 left in stock") |
+| `used_price` | `float` or `null` | Cheapest used/refurbished offer shown on the product page (when available) |
 | `alert_threshold` | `float` or `null` | Threshold configured by the user |
 | `last_updated` | `str ISO` | Timestamp of the last successful fetch |
 
 ---
 
 ## Services
+
+### `amazon_price_tracker.import_wishlist`
+
+Import all products from a **public** Amazon wishlist in one shot. One sensor is created per product; products already configured are skipped.
+
+> The wishlist must be set to **Public** on Amazon (Account → Lists → Manage list → Privacy: Public).
+
+```yaml
+service: amazon_price_tracker.import_wishlist
+data:
+  url: "https://www.amazon.it/hz/wishlist/ls/XXXXXXXXXXXXXXXX"
+  # marketplace: "amazon.it"     # optional, auto-detected from URL
+  # alert_threshold: 150.00      # optional, applied to all imported products
+```
+
+Only the first page of the wishlist is scraped (~40 products). For longer lists, call the service multiple times with paginated URLs or split the wishlist.
+
+---
 
 ### `amazon_price_tracker.force_refresh`
 
@@ -186,7 +205,8 @@ logger:
 - [x] Options Flow (edit name and threshold without removing the entry)
 - [x] `amazon_price_tracker.force_refresh` service call
 - [x] Multi-domain support (10 Amazon marketplaces)
-- [x] Real-time availability text
+- [x] Real-time availability text + used price attribute
+- [x] Wishlist import service (public wishlists)
 - [ ] Proxy support for blocked IPs
 - [ ] GitHub Actions release workflow for HACS community store
 

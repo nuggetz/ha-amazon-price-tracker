@@ -105,6 +105,17 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return False
 
 
+    async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
+        """Create an entry from the import_wishlist service — no network check."""
+        asin = import_data["asin"]
+        await self.async_set_unique_id(asin)
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=import_data.get("name", asin),
+            data=import_data,
+        )
+
+
 class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry

@@ -44,12 +44,18 @@ _ha_udc.DataUpdateCoordinator = _DataUpdateCoordinator
 _ha_udc.UpdateFailed          = _UpdateFailed
 
 _ha_cv.entity_ids = _noop
+_ha_cv.string = str
 
 _ha_ce.ConfigEntry   = type("ConfigEntry", (), {})
 _ha_ce.OptionsFlow   = type("OptionsFlow", (), {})
 _ha_ce.ConfigFlow    = type("ConfigFlow", (), {})
+_ha_ce.SOURCE_IMPORT = "import"
 
 _ha_df.FlowResult = dict
+
+_ha_exc = types.ModuleType("homeassistant.exceptions")
+_ha_exc.ServiceValidationError = type("ServiceValidationError", (Exception,), {})
+sys.modules["homeassistant.exceptions"] = _ha_exc
 
 _ha_sensor.SensorDeviceClass  = type("SensorDeviceClass",  (), {"MONETARY": "monetary"})
 _ha_sensor.SensorStateClass   = type("SensorStateClass",   (), {"MEASUREMENT": "measurement"})
@@ -82,10 +88,11 @@ for _name, _mod in [
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx  # noqa: E402  (after sys.path manipulation)
-from custom_components.amazon_price_tracker.const import HEADERS
+from custom_components.amazon_price_tracker.const import DOMAIN_CONFIG, HEADERS
 from custom_components.amazon_price_tracker.coordinator import (
     AmazonCaptchaError,
     parse_product_page,
+    parse_wishlist_page,
 )
 
 
@@ -112,7 +119,7 @@ async def test_asin(asin: str) -> None:
         return
 
     try:
-        price, title, is_available, availability_text = parse_product_page(
+        price, title, is_available, availability_text, used_price = parse_product_page(
             response.text, asin, european_format=True
         )
     except AmazonCaptchaError:
@@ -120,18 +127,53 @@ async def test_asin(asin: str) -> None:
         return
 
     print(f"Title             : {title}")
-    if price is not None:
-        print(f"Price             : {price}")
-    else:
-        print("Price             : not found")
+    print(f"Price             : {price if price is not None else 'not found'}")
+    print(f"Used price        : {used_price if used_price is not None else 'not available'}")
     print(f"Available         : {is_available}")
     print(f"Availability text : {availability_text}")
 
 
+async def test_wishlist(url: str) -> None:
+    import re
+    match = re.search(r"amazon\.([a-z.]+)", url, re.IGNORECASE)
+    marketplace = f"amazon.{match.group(1)}" if match else "amazon.it"
+    config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG["amazon.it"])
+    headers = {**HEADERS, "Accept-Language": config["language"]}
+
+    print(f"\n{'=' * 60}")
+    print(f"Wishlist : {url}")
+    print(f"Marketplace detected: {marketplace}")
+
+    async with httpx.AsyncClient(
+        headers=headers, follow_redirects=True, timeout=httpx.Timeout(30.0)
+    ) as client:
+        try:
+            response = await client.get(url)
+            print(f"HTTP     : {response.status_code}")
+        except httpx.HTTPError as err:
+            print(f"ERROR: {err}")
+            return
+
+    if response.status_code != 200:
+        print(f"RESULT: HTTP {response.status_code} — wishlist not found or private")
+        return
+
+    products = parse_wishlist_page(response.text)
+    print(f"Products found: {len(products)}")
+    for i, p in enumerate(products, 1):
+        print(f"  {i:2}. [{p['asin']}] {p['name'][:70]}")
+
+
 async def main() -> None:
-    asins = sys.argv[1:] if len(sys.argv) > 1 else ["B09FKN79QR"]
-    for asin in asins:
-        await test_asin(asin.strip().upper())
+    args = sys.argv[1:]
+    if not args:
+        args = ["B0D6NMDNNX"]
+
+    for arg in args:
+        if arg.startswith("http"):
+            await test_wishlist(arg)
+        else:
+            await test_asin(arg.strip().upper())
 
 
 if __name__ == "__main__":
