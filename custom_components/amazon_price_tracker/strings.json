@@ -24,5 +24,21 @@
     "abort": {
       "already_configured": "Questo ASIN è già configurato."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Modifica prodotto",
+        "description": "Aggiorna il nome o la soglia di prezzo. L'ASIN non è modificabile.",
+        "data": {
+          "name": "Nome personalizzato",
+          "alert_threshold": "Soglia prezzo alert in EUR (opzionale)"
+        },
+        "data_description": {
+          "name": "Nome che verrà mostrato in Home Assistant",
+          "alert_threshold": "Lascia vuoto per rimuovere la soglia"
+        }
+      }
+    }
   }
 }

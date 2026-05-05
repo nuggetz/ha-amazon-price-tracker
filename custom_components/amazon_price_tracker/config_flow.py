@@ -8,6 +8,7 @@ import httpx
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN, HEADERS
@@ -34,6 +35,13 @@ def _validate_asin(raw: str) -> str:
 
 class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> AmazonPriceTrackerOptionsFlow:
+        return AmazonPriceTrackerOptionsFlow(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -89,3 +97,40 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except httpx.HTTPError as err:
             _LOGGER.warning("Connectivity check failed for %s: %s", asin, err)
             return False
+
+
+class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        # Current values: options take precedence over the original data
+        current_name = self._config_entry.options.get(
+            "name", self._config_entry.data["name"]
+        )
+        current_threshold = self._config_entry.options.get(
+            "alert_threshold", self._config_entry.data.get("alert_threshold")
+        )
+
+        if user_input is not None:
+            name = user_input["name"].strip()
+            alert_threshold = user_input.get("alert_threshold")
+            return self.async_create_entry(
+                title=name,
+                data={"name": name, "alert_threshold": alert_threshold},
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name", default=current_name): str,
+                    vol.Optional(
+                        "alert_threshold",
+                        description={"suggested_value": current_threshold},
+                    ): vol.Coerce(float),
+                }
+            ),
+        )

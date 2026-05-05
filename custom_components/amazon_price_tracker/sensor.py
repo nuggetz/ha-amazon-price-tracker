@@ -47,7 +47,10 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
         super().__init__(coordinator)
         self._entry = entry
         self._asin: str = entry.data["asin"]
-        self._alert_threshold: float | None = entry.data.get("alert_threshold")
+        # Options override data for mutable fields
+        self._alert_threshold: float | None = entry.options.get(
+            "alert_threshold", entry.data.get("alert_threshold")
+        )
         self._min_price: float | None = None
         self._min_price_date: str | None = None
         self._attr_unique_id = f"amazon_price_{self._asin}"
@@ -111,9 +114,10 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
 
     @property
     def device_info(self) -> DeviceInfo:
+        name = self._entry.options.get("name", self._entry.data["name"])
         return DeviceInfo(
             identifiers={(DOMAIN, self._asin)},
-            name=self._entry.data["name"],
+            name=name,
             manufacturer="Amazon.it",
             model=self._asin,
             entry_type=DeviceEntryType.SERVICE,
