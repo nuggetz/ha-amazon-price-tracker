@@ -25,11 +25,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Options override the original data for mutable fields (name, alert_threshold)
     name = entry.options.get("name", entry.data["name"])
+    # marketplace is immutable (set once at creation, not in options)
+    marketplace = entry.data.get("marketplace", "amazon.it")
 
     coordinator = AmazonPriceCoordinator(
         hass,
         asin=entry.data["asin"],
         name=name,
+        marketplace=marketplace,
     )
 
     await coordinator.async_config_entry_first_refresh()

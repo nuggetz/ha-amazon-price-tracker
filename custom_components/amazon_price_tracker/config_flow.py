@@ -11,16 +11,18 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, HEADERS
+from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, HEADERS
 
 _LOGGER = logging.getLogger(__name__)
 
 _ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
+_MARKETPLACES = sorted(DOMAIN_CONFIG.keys())
 
 _STEP_USER_SCHEMA = vol.Schema(
     {
         vol.Required("asin"): str,
         vol.Required("name"): str,
+        vol.Required("marketplace", default=DEFAULT_MARKETPLACE): vol.In(_MARKETPLACES),
         vol.Optional("alert_threshold"): vol.Coerce(float),
     }
 )
@@ -59,9 +61,9 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(asin)
                 self._abort_if_unique_id_configured()
 
-                # 3. Light connectivity check — verifies Amazon.it is reachable
-                #    and the ASIN path returns HTTP 200
-                if not await self._check_reachable(asin):
+                # 3. Light connectivity check — verifies the marketplace is reachable
+                marketplace = user_input.get("marketplace", DEFAULT_MARKETPLACE)
+                if not await self._check_reachable(asin, marketplace):
                     errors["base"] = "cannot_connect"
 
             if not errors:
@@ -72,6 +74,7 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         "asin": asin,
                         "name": name,
+                        "marketplace": marketplace,
                         "alert_threshold": alert_threshold,
                     },
                 )
@@ -82,12 +85,15 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def _check_reachable(self, asin: str) -> bool:
-        """Return True if amazon.it responds 200 for this ASIN path."""
-        url = f"https://www.amazon.it/dp/{asin}"
+    async def _check_reachable(self, asin: str, marketplace: str) -> bool:
+        """Return True if the marketplace responds 200 for this ASIN path."""
+        from .const import DOMAIN_CONFIG  # avoid circular at module level
+        config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
+        headers = {**HEADERS, "Accept-Language": config["language"]}
+        url = f"https://www.{marketplace}/dp/{asin}"
         try:
             async with httpx.AsyncClient(
-                headers=HEADERS,
+                headers=headers,
                 follow_redirects=True,
                 timeout=httpx.Timeout(10.0),
             ) as client:
@@ -95,7 +101,7 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # 200 even on CAPTCHA pages — we accept it; parsing issues surface later
                 return response.status_code == 200
         except httpx.HTTPError as err:
-            _LOGGER.warning("Connectivity check failed for %s: %s", asin, err)
+            _LOGGER.warning("Connectivity check failed for %s on %s: %s", asin, marketplace, err)
             return False
 
 

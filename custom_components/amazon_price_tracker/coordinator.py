@@ -12,10 +12,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    AVAILABILITY_SELECTOR,
     BASE_INTERVAL_SECONDS,
     BASE_URL,
     CAPTCHA_SIGNALS,
+    DEFAULT_MARKETPLACE,
     DOMAIN,
+    DOMAIN_CONFIG,
     HEADERS,
     JITTER_SECONDS,
     OUT_OF_STOCK_SELECTOR,
@@ -26,25 +29,41 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_CURRENCY_SYMBOLS = ("€", "£", "$", "kr", "zł", "EUR", "GBP", "USD", "PLN", "SEK")
+
 
 class AmazonCaptchaError(Exception):
     pass
 
 
-def parse_price(raw: str) -> float | None:
-    """Normalize a European-format price string to float."""
-    cleaned = raw.strip().replace("€", "").replace("EUR", "").strip()
-    # European format: dot = thousands separator, comma = decimal
-    cleaned = cleaned.replace(".", "").replace(",", ".")
+def parse_price(raw: str, european_format: bool = True) -> float | None:
+    """Normalize a price string to float.
+
+    european_format=True : dots are thousands separators, comma is decimal (1.299,99)
+    european_format=False: commas are thousands separators, dot is decimal (1,299.99)
+    """
+    cleaned = raw.strip()
+    for sym in _CURRENCY_SYMBOLS:
+        cleaned = cleaned.replace(sym, "")
+    cleaned = cleaned.strip()
+
+    if european_format:
+        cleaned = cleaned.replace(" ", "").replace(".", "").replace(",", ".")
+    else:
+        cleaned = cleaned.replace(",", "").replace(" ", "")
+
     try:
         return float(cleaned)
     except ValueError:
         return None
 
 
-def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, bool]:
-    """Parse an Amazon product page and return (price, title, is_available).
+def parse_product_page(
+    html: str, asin: str, european_format: bool = True
+) -> tuple[float | None, str | None, bool, str | None]:
+    """Parse an Amazon product page.
 
+    Returns (price, title, is_available, availability_text).
     Runs synchronously — must be called via async_add_executor_job.
     Raises AmazonCaptchaError if a CAPTCHA wall is detected.
     """
@@ -55,7 +74,12 @@ def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, 
 
     soup = BeautifulSoup(html, "html.parser")
 
+    # --- Availability ---
     is_available = soup.select_one(OUT_OF_STOCK_SELECTOR) is None
+    availability_text: str | None = None
+    avail_el = soup.select_one(AVAILABILITY_SELECTOR)
+    if avail_el:
+        availability_text = avail_el.get_text(strip=True) or None
 
     price: float | None = None
     title: str | None = None
@@ -64,7 +88,6 @@ def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, 
     for script in soup.find_all("script", type="application/ld+json"):
         try:
             data = json.loads(script.string or "")
-            # Some pages wrap multiple objects in a list
             if isinstance(data, list):
                 data = next(
                     (d for d in data if isinstance(d, dict) and d.get("@type") == "Product"),
@@ -92,7 +115,7 @@ def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, 
         for selector in PRICE_SELECTORS:
             el = soup.select_one(selector)
             if el:
-                candidate = parse_price(el.get_text(strip=True))
+                candidate = parse_price(el.get_text(strip=True), european_format)
                 if candidate is not None:
                     price = candidate
                     break
@@ -102,9 +125,17 @@ def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, 
         whole_el = soup.select_one("span.a-price-whole")
         frac_el = soup.select_one("span.a-price-fraction")
         if whole_el and frac_el:
-            whole = whole_el.get_text(strip=True).rstrip(",.")
-            frac = frac_el.get_text(strip=True)
-            price = parse_price(f"{whole}.{frac}")
+            whole = whole_el.get_text(strip=True).rstrip(",. ")
+            frac = frac_el.get_text(strip=True).strip()
+            # Strip thousands separators from the whole part
+            if european_format:
+                whole = whole.replace(".", "").replace(",", "").replace(" ", "")
+            else:
+                whole = whole.replace(",", "").replace(" ", "")
+            try:
+                price = float(f"{whole}.{frac}")
+            except ValueError:
+                pass
 
     # --- Title fallback ---
     if title is None:
@@ -123,13 +154,19 @@ def parse_product_page(html: str, asin: str) -> tuple[float | None, str | None, 
             html,
         )
 
-    return price, title, is_available
+    return price, title, is_available, availability_text
 
 
 class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
     """Fetches and caches price data for a single Amazon ASIN."""
 
-    def __init__(self, hass: HomeAssistant, asin: str, name: str) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        asin: str,
+        name: str,
+        marketplace: str = DEFAULT_MARKETPLACE,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -138,12 +175,17 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         )
         self.asin = asin
         self.product_name = name
+        self.marketplace = marketplace
+        self._market_config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
         self._client: httpx.AsyncClient | None = None
+
+    def _build_headers(self) -> dict:
+        return {**HEADERS, "Accept-Language": self._market_config["language"]}
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                headers=HEADERS,
+                headers=self._build_headers(),
                 follow_redirects=True,
                 timeout=httpx.Timeout(REQUEST_TIMEOUT),
             )
@@ -154,7 +196,9 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             await self._client.aclose()
 
     async def _async_update_data(self) -> dict:
-        url = BASE_URL.format(asin=self.asin)
+        url = BASE_URL.format(marketplace=self.marketplace, asin=self.asin)
+        european_format: bool = self._market_config["european_format"]
+
         try:
             client = await self._get_client()
             response = await client.get(url)
@@ -167,14 +211,15 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(f"Network error for {self.asin}: {err}") from err
 
         try:
-            price, title, is_available = await self.hass.async_add_executor_job(
-                parse_product_page, response.text, self.asin
+            price, title, is_available, availability_text = (
+                await self.hass.async_add_executor_job(
+                    parse_product_page, response.text, self.asin, european_format
+                )
             )
         except AmazonCaptchaError as err:
             _LOGGER.warning("CAPTCHA for ASIN %s — will retry next cycle", self.asin)
             raise UpdateFailed(str(err)) from err
 
-        # Randomize next polling interval to spread requests and reduce fingerprinting
         jitter = random.uniform(-JITTER_SECONDS, JITTER_SECONDS)
         self.update_interval = timedelta(seconds=BASE_INTERVAL_SECONDS + jitter)
 
@@ -184,4 +229,5 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             "url": url,
             "last_updated": datetime.utcnow(),
             "is_available": is_available,
+            "availability_text": availability_text,
         }

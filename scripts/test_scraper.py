@@ -13,34 +13,68 @@ from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Minimal HA stubs — must be registered before any component import so that
-# __init__.py and coordinator.py can be loaded without homeassistant installed.
+# all component modules can be loaded without homeassistant installed.
 # ---------------------------------------------------------------------------
-def _stub(*a, **kw):
-    pass
-
 class _DataUpdateCoordinator:
     def __init__(self, *a, **kw): pass
-    def __class_getitem__(cls, item): return cls  # supports DataUpdateCoordinator[dict]
+    def __class_getitem__(cls, item): return cls
 
 class _UpdateFailed(Exception):
     pass
 
-_ha = types.ModuleType("homeassistant")
-_ha_core = types.ModuleType("homeassistant.core")
-_ha_helpers = types.ModuleType("homeassistant.helpers")
-_ha_udc = types.ModuleType("homeassistant.helpers.update_coordinator")
-_ha_ce = types.ModuleType("homeassistant.config_entries")
+def _noop(*a, **kw): pass
 
-_ha_core.HomeAssistant = type("HomeAssistant", (), {})
+_ha           = types.ModuleType("homeassistant")
+_ha_core      = types.ModuleType("homeassistant.core")
+_ha_helpers   = types.ModuleType("homeassistant.helpers")
+_ha_udc       = types.ModuleType("homeassistant.helpers.update_coordinator")
+_ha_cv        = types.ModuleType("homeassistant.helpers.config_validation")
+_ha_er        = types.ModuleType("homeassistant.helpers.entity_registry")
+_ha_ce        = types.ModuleType("homeassistant.config_entries")
+_ha_df        = types.ModuleType("homeassistant.data_entry_flow")
+_ha_sensor    = types.ModuleType("homeassistant.components.sensor")
+_ha_devreg    = types.ModuleType("homeassistant.helpers.device_registry")
+_ha_ep        = types.ModuleType("homeassistant.helpers.entity_platform")
+
+_ha_core.HomeAssistant   = type("HomeAssistant", (), {})
+_ha_core.ServiceCall     = type("ServiceCall", (), {"data": {}})
+_ha_core.callback        = lambda f: f
+
 _ha_udc.DataUpdateCoordinator = _DataUpdateCoordinator
-_ha_udc.UpdateFailed = _UpdateFailed
-_ha_ce.ConfigEntry = type("ConfigEntry", (), {})
+_ha_udc.UpdateFailed          = _UpdateFailed
 
-sys.modules["homeassistant"] = _ha
-sys.modules["homeassistant.core"] = _ha_core
-sys.modules["homeassistant.helpers"] = _ha_helpers
-sys.modules["homeassistant.helpers.update_coordinator"] = _ha_udc
-sys.modules["homeassistant.config_entries"] = _ha_ce
+_ha_cv.entity_ids = _noop
+
+_ha_ce.ConfigEntry   = type("ConfigEntry", (), {})
+_ha_ce.OptionsFlow   = type("OptionsFlow", (), {})
+_ha_ce.ConfigFlow    = type("ConfigFlow", (), {})
+
+_ha_df.FlowResult = dict
+
+_ha_sensor.SensorDeviceClass  = type("SensorDeviceClass",  (), {"MONETARY": "monetary"})
+_ha_sensor.SensorStateClass   = type("SensorStateClass",   (), {"MEASUREMENT": "measurement"})
+_ha_sensor.RestoreSensor      = type("RestoreSensor",      (), {})
+
+_ha_devreg.DeviceEntryType = type("DeviceEntryType", (), {"SERVICE": "service"})
+_ha_devreg.DeviceInfo      = dict
+
+_ha_ep.AddEntitiesCallback = _noop
+
+for _name, _mod in [
+    ("homeassistant",                              _ha),
+    ("homeassistant.core",                         _ha_core),
+    ("homeassistant.helpers",                      _ha_helpers),
+    ("homeassistant.helpers.update_coordinator",   _ha_udc),
+    ("homeassistant.helpers.config_validation",    _ha_cv),
+    ("homeassistant.helpers.entity_registry",      _ha_er),
+    ("homeassistant.helpers.device_registry",      _ha_devreg),
+    ("homeassistant.helpers.entity_platform",      _ha_ep),
+    ("homeassistant.config_entries",               _ha_ce),
+    ("homeassistant.data_entry_flow",              _ha_df),
+    ("homeassistant.components",                   types.ModuleType("homeassistant.components")),
+    ("homeassistant.components.sensor",            _ha_sensor),
+]:
+    sys.modules[_name] = _mod
 
 # ---------------------------------------------------------------------------
 # Now it is safe to import from the component
@@ -78,17 +112,20 @@ async def test_asin(asin: str) -> None:
         return
 
     try:
-        price, title, is_available = parse_product_page(response.text, asin)
+        price, title, is_available, availability_text = parse_product_page(
+            response.text, asin, european_format=True
+        )
     except AmazonCaptchaError:
         print("RESULT: CAPTCHA detected — try again later or change User-Agent")
         return
 
-    print(f"Title    : {title}")
+    print(f"Title             : {title}")
     if price is not None:
-        print(f"Price    : {price} EUR")
+        print(f"Price             : {price}")
     else:
-        print("Price    : not found")
-    print(f"Available: {is_available}")
+        print("Price             : not found")
+    print(f"Available         : {is_available}")
+    print(f"Availability text : {availability_text}")
 
 
 async def main() -> None:

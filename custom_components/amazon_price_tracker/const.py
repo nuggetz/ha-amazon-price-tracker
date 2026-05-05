@@ -1,6 +1,7 @@
 DOMAIN = "amazon_price_tracker"
 
-BASE_URL = "https://www.amazon.it/dp/{asin}"
+# URL template — marketplace and asin are injected at runtime
+BASE_URL = "https://www.{marketplace}/dp/{asin}"
 REQUEST_TIMEOUT = 30
 
 BASE_INTERVAL_SECONDS = 4 * 3600
@@ -8,6 +9,7 @@ JITTER_SECONDS = 30 * 60
 
 ASIN_PATTERN = r"^[A-Z0-9]{10}$"
 
+# Base HTTP headers — Accept-Language is overridden per marketplace
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -25,8 +27,25 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1",
 }
 
+# Supported Amazon marketplaces
+# european_format: True  → 1.299,99  (dot=thousands, comma=decimal)
+# european_format: False → 1,299.99  (comma=thousands, dot=decimal)
+DOMAIN_CONFIG: dict[str, dict] = {
+    "amazon.it": {"currency": "EUR", "language": "it-IT,it;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.de": {"currency": "EUR", "language": "de-DE,de;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.fr": {"currency": "EUR", "language": "fr-FR,fr;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.es": {"currency": "EUR", "language": "es-ES,es;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.nl": {"currency": "EUR", "language": "nl-NL,nl;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.be": {"currency": "EUR", "language": "fr-BE,fr;q=0.9,nl;q=0.8,en;q=0.7", "european_format": True},
+    "amazon.pl": {"currency": "PLN", "language": "pl-PL,pl;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.se": {"currency": "SEK", "language": "sv-SE,sv;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.co.uk": {"currency": "GBP", "language": "en-GB,en;q=0.9", "european_format": False},
+    "amazon.com": {"currency": "USD", "language": "en-US,en;q=0.9", "european_format": False},
+}
+
+DEFAULT_MARKETPLACE = "amazon.it"
+
 # Price selectors — ordered by reliability (Amazon DOM 2025-2026)
-# Scoped to the main purchase box first, then progressively wider
 PRICE_SELECTORS = [
     "#corePriceDisplay_desktop_feature_div span.a-offscreen",
     "#priceToPay span.a-offscreen",
@@ -49,3 +68,5 @@ CAPTCHA_SIGNALS = [
 
 # Presence of this div means the product is out of stock
 OUT_OF_STOCK_SELECTOR = "#outOfStockBuyBox_feature_div"
+# Human-readable availability string (e.g. "Solo 3 rimasti in magazzino")
+AVAILABILITY_SELECTOR = "#availability span"
