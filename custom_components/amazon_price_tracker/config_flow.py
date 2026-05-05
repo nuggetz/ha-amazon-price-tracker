@@ -11,18 +11,26 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, HEADERS
+from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, HEADERS, WISHLIST_ID_RE
 
 _LOGGER = logging.getLogger(__name__)
 
 _ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
+_WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 _MARKETPLACES = sorted(DOMAIN_CONFIG.keys())
 
-_STEP_USER_SCHEMA = vol.Schema(
+_STEP_ADD_PRODUCT_SCHEMA = vol.Schema(
     {
         vol.Required("asin"): str,
         vol.Required("name"): str,
         vol.Required("marketplace", default=DEFAULT_MARKETPLACE): vol.In(_MARKETPLACES),
+        vol.Optional("alert_threshold"): vol.Coerce(float),
+    }
+)
+
+_STEP_WISHLIST_SCHEMA = vol.Schema(
+    {
+        vol.Required("url"): str,
         vol.Optional("alert_threshold"): vol.Coerce(float),
     }
 )
@@ -48,20 +56,25 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["add_product", "import_wishlist"],
+        )
+
+    async def async_step_add_product(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # 1. Validate ASIN format
             try:
                 asin = _validate_asin(user_input["asin"])
             except ValueError:
                 errors["asin"] = "invalid_asin"
             else:
-                # 2. Prevent duplicates
                 await self.async_set_unique_id(asin)
                 self._abort_if_unique_id_configured()
 
-                # 3. Light connectivity check — verifies the marketplace is reachable
                 marketplace = user_input.get("marketplace", DEFAULT_MARKETPLACE)
                 if not await self._check_reachable(asin, marketplace):
                     errors["base"] = "cannot_connect"
@@ -80,14 +93,88 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=_STEP_USER_SCHEMA,
+            step_id="add_product",
+            data_schema=_STEP_ADD_PRODUCT_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_import_wishlist(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            url: str = user_input["url"].strip()
+            alert_threshold: float | None = user_input.get("alert_threshold")
+
+            wishlist_match = _WISHLIST_RE.search(url)
+            if not wishlist_match:
+                errors["url"] = "invalid_wishlist_url"
+            else:
+                marketplace_suffix = wishlist_match.group(1).lower()
+                wishlist_id = wishlist_match.group(2)
+                marketplace = f"amazon.{marketplace_suffix}"
+                if marketplace not in DOMAIN_CONFIG:
+                    marketplace = DEFAULT_MARKETPLACE
+
+                market_config = DOMAIN_CONFIG[marketplace]
+                headers = {**HEADERS, "Accept-Language": market_config["language"]}
+                wishlist_url = f"https://www.{marketplace}/hz/wishlist/ls/{wishlist_id}"
+
+                try:
+                    async with httpx.AsyncClient(
+                        headers=headers,
+                        follow_redirects=True,
+                        timeout=httpx.Timeout(30.0),
+                    ) as client:
+                        response = await client.get(wishlist_url)
+                        response.raise_for_status()
+                except httpx.HTTPStatusError:
+                    errors["base"] = "wishlist_not_found"
+                except httpx.HTTPError:
+                    errors["base"] = "cannot_connect"
+
+                if not errors:
+                    from .coordinator import parse_wishlist_page  # avoid circular import
+
+                    products = await self.hass.async_add_executor_job(
+                        parse_wishlist_page, response.text
+                    )
+
+                    if not products:
+                        errors["base"] = "wishlist_empty"
+
+                if not errors:
+                    added = 0
+                    for product in products:
+                        result = await self.hass.config_entries.flow.async_init(
+                            DOMAIN,
+                            context={"source": config_entries.SOURCE_IMPORT},
+                            data={
+                                "asin": product["asin"],
+                                "name": product["name"],
+                                "marketplace": marketplace,
+                                "alert_threshold": alert_threshold,
+                            },
+                        )
+                        if result.get("type") == "create_entry":
+                            added += 1
+
+                    return self.async_abort(
+                        reason="wishlist_imported",
+                        description_placeholders={
+                            "added": str(added),
+                            "total": str(len(products)),
+                        },
+                    )
+
+        return self.async_show_form(
+            step_id="import_wishlist",
+            data_schema=_STEP_WISHLIST_SCHEMA,
             errors=errors,
         )
 
     async def _check_reachable(self, asin: str, marketplace: str) -> bool:
-        """Return True if the marketplace responds 200 for this ASIN path."""
-        from .const import DOMAIN_CONFIG  # avoid circular at module level
         config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
         headers = {**HEADERS, "Accept-Language": config["language"]}
         url = f"https://www.{marketplace}/dp/{asin}"
@@ -98,12 +185,10 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 timeout=httpx.Timeout(10.0),
             ) as client:
                 response = await client.get(url)
-                # 200 even on CAPTCHA pages — we accept it; parsing issues surface later
                 return response.status_code == 200
         except httpx.HTTPError as err:
             _LOGGER.warning("Connectivity check failed for %s on %s: %s", asin, marketplace, err)
             return False
-
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
         """Create an entry from the import_wishlist service — no network check."""
@@ -123,7 +208,6 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        # Current values: options take precedence over the original data
         current_name = self._config_entry.options.get(
             "name", self._config_entry.data["name"]
         )

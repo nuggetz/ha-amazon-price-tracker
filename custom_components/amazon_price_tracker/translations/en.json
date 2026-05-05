@@ -2,6 +2,12 @@
   "config": {
     "step": {
       "user": {
+        "menu_options": {
+          "add_product": "Add product",
+          "import_wishlist": "Import from wishlist"
+        }
+      },
+      "add_product": {
         "title": "Add Amazon product",
         "description": "Enter the details of the product to monitor.",
         "data": {
@@ -16,15 +22,31 @@
           "marketplace": "Amazon website to track the price on (e.g. amazon.com, amazon.de)",
           "alert_threshold": "Price below which you want to trigger automations"
         }
+      },
+      "import_wishlist": {
+        "title": "Import Amazon wishlist",
+        "description": "Enter the URL of a public Amazon wishlist. A sensor will be created for each product found.",
+        "data": {
+          "url": "Wishlist URL",
+          "alert_threshold": "Price alert threshold for all products (optional)"
+        },
+        "data_description": {
+          "url": "Full URL of the public wishlist (e.g. https://www.amazon.it/hz/wishlist/ls/XXXX). The wishlist must be set to Public on Amazon.",
+          "alert_threshold": "Threshold applied to all imported products. Can be changed per-product later."
+        }
       }
     },
     "error": {
       "invalid_asin": "Invalid ASIN. Must be exactly 10 alphanumeric characters (A-Z, 0-9).",
       "already_configured": "This ASIN is already being monitored.",
-      "cannot_connect": "Cannot reach Amazon.it. Check your network connection."
+      "cannot_connect": "Cannot reach Amazon. Check your network connection.",
+      "invalid_wishlist_url": "Invalid URL. Use the format: https://www.amazon.it/hz/wishlist/ls/XXXX",
+      "wishlist_not_found": "Wishlist not found or set to Private on Amazon.",
+      "wishlist_empty": "No products found in the wishlist. It may be empty or set to Private."
     },
     "abort": {
-      "already_configured": "This ASIN is already configured."
+      "already_configured": "This ASIN is already configured.",
+      "wishlist_imported": "Import complete: {added} products added out of {total} found."
     }
   },
   "options": {

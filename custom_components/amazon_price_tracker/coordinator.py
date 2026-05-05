@@ -26,7 +26,6 @@ from .const import (
     PRICE_SELECTORS,
     REQUEST_TIMEOUT,
     TITLE_SELECTORS,
-    USED_PRICE_SELECTORS,
     WISHLIST_ID_RE,
 )
 
@@ -65,10 +64,10 @@ def parse_price(raw: str, european_format: bool = True) -> float | None:
 
 def parse_product_page(
     html: str, asin: str, european_format: bool = True
-) -> tuple[float | None, str | None, bool, str | None, float | None]:
+) -> tuple[float | None, str | None, bool, str | None]:
     """Parse an Amazon product page.
 
-    Returns (price, title, is_available, availability_text, used_price).
+    Returns (price, title, is_available, availability_text).
     Runs synchronously — must be called via async_add_executor_job.
     Raises AmazonCaptchaError if a CAPTCHA wall is detected.
     """
@@ -151,16 +150,6 @@ def parse_product_page(
                     title = candidate
                     break
 
-    # --- Used price (optional, present only when third-party used offers exist) ---
-    used_price: float | None = None
-    for selector in USED_PRICE_SELECTORS:
-        el = soup.select_one(selector)
-        if el:
-            candidate = parse_price(el.get_text(strip=True), european_format)
-            if candidate is not None:
-                used_price = candidate
-                break
-
     if price is None and is_available:
         _LOGGER.warning(
             "Could not parse price for ASIN %s — page snippet: %.300s",
@@ -168,7 +157,7 @@ def parse_product_page(
             html,
         )
 
-    return price, title, is_available, availability_text, used_price
+    return price, title, is_available, availability_text
 
 
 def parse_wishlist_page(html: str) -> list[dict]:
@@ -268,7 +257,7 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(f"Network error for {self.asin}: {err}") from err
 
         try:
-            price, title, is_available, availability_text, used_price = (
+            price, title, is_available, availability_text = (
                 await self.hass.async_add_executor_job(
                     parse_product_page, response.text, self.asin, european_format
                 )
@@ -287,5 +276,4 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             "last_updated": datetime.utcnow(),
             "is_available": is_available,
             "availability_text": availability_text,
-            "used_price": used_price,
         }

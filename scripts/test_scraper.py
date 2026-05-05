@@ -119,7 +119,7 @@ async def test_asin(asin: str) -> None:
         return
 
     try:
-        price, title, is_available, availability_text, used_price = parse_product_page(
+        price, title, is_available, availability_text = parse_product_page(
             response.text, asin, european_format=True
         )
     except AmazonCaptchaError:
@@ -128,7 +128,6 @@ async def test_asin(asin: str) -> None:
 
     print(f"Title             : {title}")
     print(f"Price             : {price if price is not None else 'not found'}")
-    print(f"Used price        : {used_price if used_price is not None else 'not available'}")
     print(f"Available         : {is_available}")
     print(f"Availability text : {availability_text}")
 

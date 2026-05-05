@@ -2,6 +2,12 @@
   "config": {
     "step": {
       "user": {
+        "menu_options": {
+          "add_product": "Aggiungi prodotto",
+          "import_wishlist": "Importa da lista desideri"
+        }
+      },
+      "add_product": {
         "title": "Aggiungi prodotto Amazon",
         "description": "Inserisci i dati del prodotto da monitorare.",
         "data": {
@@ -16,15 +22,31 @@
           "marketplace": "Sito Amazon su cui monitorare il prezzo (es. amazon.it, amazon.de)",
           "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni"
         }
+      },
+      "import_wishlist": {
+        "title": "Importa lista desideri Amazon",
+        "description": "Inserisci l'URL della lista desideri pubblica. Verranno creati sensori per tutti i prodotti trovati.",
+        "data": {
+          "url": "URL lista desideri",
+          "alert_threshold": "Soglia prezzo alert per tutti i prodotti (opzionale)"
+        },
+        "data_description": {
+          "url": "URL completo della lista desideri pubblica (es. https://www.amazon.it/hz/wishlist/ls/XXXX). La lista deve essere impostata come Pubblica su Amazon.",
+          "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito."
+        }
       }
     },
     "error": {
       "invalid_asin": "ASIN non valido. Deve essere esattamente 10 caratteri alfanumerici (A-Z, 0-9).",
       "already_configured": "Questo ASIN è già monitorato.",
-      "cannot_connect": "Impossibile raggiungere Amazon.it. Controlla la connessione di rete."
+      "cannot_connect": "Impossibile raggiungere Amazon. Controlla la connessione di rete.",
+      "invalid_wishlist_url": "URL non valido. Usa il formato: https://www.amazon.it/hz/wishlist/ls/XXXX",
+      "wishlist_not_found": "Lista desideri non trovata o impostata come Privata su Amazon.",
+      "wishlist_empty": "Nessun prodotto trovato nella lista. La lista potrebbe essere vuota o privata."
     },
     "abort": {
-      "already_configured": "Questo ASIN è già configurato."
+      "already_configured": "Questo ASIN è già configurato.",
+      "wishlist_imported": "Importazione completata: {added} prodotti aggiunti su {total} trovati."
     }
   },
   "options": {

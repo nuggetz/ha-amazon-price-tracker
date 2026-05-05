@@ -110,7 +110,6 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             "min_price_date": self._min_price_date,
             "is_available": data.get("is_available"),
             "availability_text": data.get("availability_text"),
-            "used_price": data.get("used_price"),
             "alert_threshold": self._alert_threshold,
             "last_updated": (
                 last_updated.isoformat()

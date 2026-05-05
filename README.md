@@ -1,5 +1,7 @@
 # Amazon Price Tracker for Home Assistant
 
+![Amazon Price Tracker logo](docs/amazon_price_tracker_logo.svg)
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.11%2B-blue)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -59,7 +61,14 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 
 Go to **Settings → Integrations → Add integration → Amazon Price Tracker**.
 
-Each product is added individually. Add as many as you need.
+When adding the integration you can choose between two modes:
+
+- **Add product** — add a single product by ASIN
+- **Import from wishlist** — import all products from a public Amazon wishlist at once
+
+![Config Flow menu](docs/screenshots/config-flow.png)
+
+### Add product
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
@@ -69,6 +78,15 @@ Each product is added individually. Add as many as you need.
 | Price alert threshold | No | Used in automations to trigger below a target price |
 
 > **Finding the ASIN:** open the product page on Amazon. The ASIN is in the URL after `/dp/` (e.g. `amazon.de/dp/B09FKN79QR`) or in the product details section near the bottom of the page. For products with variants (colour, size, storage…), select the exact variant first, then copy the URL.
+
+### Import from wishlist
+
+| Field | Required | Description |
+| ----- | -------- | ----------- |
+| Wishlist URL | Yes | Full URL of a **public** Amazon wishlist |
+| Price alert threshold | No | Applied to all imported products (editable per-product later) |
+
+The wishlist must be set to **Public** on Amazon (Account → Lists → Manage list → Privacy: Public). Only the first page (~40 products) is scraped.
 
 To **edit** the name or alert threshold of an existing product, go to the integration panel and click **Configure** — no need to remove and re-add.
 
@@ -89,9 +107,10 @@ Each product creates one sensor entity under a dedicated device.
 | `min_price_date` | `str ISO` | Date the minimum was recorded |
 | `is_available` | `bool` | `false` when the product is out of stock |
 | `availability_text` | `str` | Raw stock message from Amazon (e.g. "Only 2 left in stock") |
-| `used_price` | `float` or `null` | Cheapest used/refurbished offer shown on the product page (when available) |
 | `alert_threshold` | `float` or `null` | Threshold configured by the user |
 | `last_updated` | `str ISO` | Timestamp of the last successful fetch |
+
+![Sensor attributes](docs/screenshots/entity-states.png)
 
 ---
 
@@ -154,6 +173,8 @@ entities:
 hours_to_show: 720
 ```
 
+![Price history graph](docs/screenshots/statistics.png)
+
 ---
 
 ## Price alert automation
@@ -205,8 +226,8 @@ logger:
 - [x] Options Flow (edit name and threshold without removing the entry)
 - [x] `amazon_price_tracker.force_refresh` service call
 - [x] Multi-domain support (10 Amazon marketplaces)
-- [x] Real-time availability text + used price attribute
-- [x] Wishlist import service (public wishlists)
+- [x] Real-time availability text
+- [x] Wishlist import — from Config Flow UI and from Developer Tools service
 - [ ] Proxy support for blocked IPs
 - [ ] GitHub Actions release workflow for HACS community store
 

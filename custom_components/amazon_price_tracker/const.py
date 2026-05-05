@@ -71,14 +71,6 @@ OUT_OF_STOCK_SELECTOR = "#outOfStockBuyBox_feature_div"
 # Human-readable availability string (e.g. "Solo 3 rimasti in magazzino")
 AVAILABILITY_SELECTOR = "#availability span"
 
-# Used / second-hand price — shown on the product page when third-party used offers exist
-USED_PRICE_SELECTORS = [
-    "#olpLinkWidget_feature_div span.a-color-price",
-    "#usedBuySection .a-color-price",
-    ".olp-padding-right .a-color-price",
-    "#buyUsedBox .a-color-price",
-]
-
 # Wishlist — matches both /hz/wishlist/ls/ and legacy /gp/registry/wishlist/ URLs
 # Group 1 = marketplace suffix (e.g. "it", "co.uk"), Group 2 = wishlist ID
 WISHLIST_ID_RE = r"amazon\.([a-z.]+)/(?:hz/wishlist/ls|gp/registry/wishlist)/([A-Z0-9]{10,})"
