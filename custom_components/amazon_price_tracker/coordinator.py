@@ -31,7 +31,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_CURRENCY_SYMBOLS = ("€", "£", "$", "kr", "zł", "EUR", "GBP", "USD", "PLN", "SEK")
+_CURRENCY_SYMBOLS = ("€", "£", "$", "¥", "kr", "zł", "EUR", "GBP", "USD", "JPY", "CAD", "AUD", "PLN", "SEK")
 _ASIN_IN_HREF_RE = re.compile(r"/dp/([A-Z0-9]{10})")
 _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 

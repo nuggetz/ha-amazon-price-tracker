@@ -43,6 +43,9 @@ import_wishlist:
             - "amazon.se"
             - "amazon.co.uk"
             - "amazon.com"
+            - "amazon.ca"
+            - "amazon.co.jp"
+            - "amazon.com.au"
     alert_threshold:
       name: Default price alert threshold
       description: >

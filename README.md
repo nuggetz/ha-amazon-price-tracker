@@ -14,7 +14,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 
 ## Features
 
-- **10 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US — each with the correct currency and language
+- **13 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US, CA, JP, AU — each with the correct currency and language
 - Scrapes product pages without an Amazon account (JSON-LD first, CSS selectors as fallback)
 - One sensor per product, added via UI Config Flow — edit name and alert threshold at any time via Options Flow
 - Tracks historical minimum price, persisted across HA restarts
@@ -39,6 +39,9 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 | amazon.se | SEK |
 | amazon.co.uk | GBP |
 | amazon.com | USD |
+| amazon.ca | CAD |
+| amazon.co.jp | JPY |
+| amazon.com.au | AUD |
 
 ---
 
