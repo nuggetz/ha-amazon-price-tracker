@@ -15,6 +15,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 ## Features
 
 - **13 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US, CA, JP, AU — each with the correct currency and language
+- **Auto-detected default marketplace**: the marketplace dropdown pre-selects the one matching your Home Assistant country setting — no manual change needed for non-Italian installs
 - Scrapes product pages without an Amazon account (JSON-LD first, CSS selectors as fallback)
 - One sensor per product, added via UI Config Flow — edit name and alert threshold at any time via Options Flow
 - Tracks historical minimum price, persisted across HA restarts
@@ -77,7 +78,7 @@ When adding the integration you can choose between two modes:
 | ----- | -------- | ----------- |
 | ASIN | Yes | 10-character Amazon product code (e.g. `B09FKN79QR`) |
 | Custom name | Yes | Label shown in Home Assistant (e.g. `Kingston 32GB DDR5`) |
-| Amazon marketplace | Yes | Which Amazon site to track (default: `amazon.it`) |
+| Amazon marketplace | Yes | Which Amazon site to track — pre-selected automatically from your HA country setting |
 | Price alert threshold | No | Used in automations to trigger below a target price |
 
 > **Finding the ASIN:** open the product page on Amazon. The ASIN is in the URL after `/dp/` (e.g. `amazon.de/dp/B09FKN79QR`) or in the product details section near the bottom of the page. For products with variants (colour, size, storage…), select the exact variant first, then copy the URL.
@@ -202,6 +203,7 @@ action:
 
 ## Technical notes
 
+- Default marketplace is auto-detected from `hass.config.country` (ISO 3166-1 alpha-2); falls back to `amazon.it` if unset
 - Polling every ~4 hours with ±30 min jitter (reduces Amazon fingerprinting)
 - Direct HTML scraping: JSON-LD structured data first, CSS selectors as fallback, composite whole+fraction as last resort
 - `min_price` uses `RestoreSensor` — survives HA restarts without an external DB
