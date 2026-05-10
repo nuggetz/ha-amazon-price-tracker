@@ -19,14 +19,38 @@ _ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
 _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 _MARKETPLACES = sorted(DOMAIN_CONFIG.keys())
 
-_STEP_ADD_PRODUCT_SCHEMA = vol.Schema(
-    {
-        vol.Required("asin"): str,
-        vol.Required("name"): str,
-        vol.Required("marketplace", default=DEFAULT_MARKETPLACE): vol.In(_MARKETPLACES),
-        vol.Optional("alert_threshold"): vol.Coerce(float),
-    }
-)
+_COUNTRY_TO_MARKETPLACE: dict[str, str] = {
+    "IT": "amazon.it",
+    "DE": "amazon.de",
+    "FR": "amazon.fr",
+    "ES": "amazon.es",
+    "NL": "amazon.nl",
+    "BE": "amazon.be",
+    "PL": "amazon.pl",
+    "SE": "amazon.se",
+    "GB": "amazon.co.uk",
+    "US": "amazon.com",
+    "CA": "amazon.ca",
+    "JP": "amazon.co.jp",
+    "AU": "amazon.com.au",
+}
+
+
+def _default_marketplace(country: str | None) -> str:
+    if country:
+        return _COUNTRY_TO_MARKETPLACE.get(country.upper(), DEFAULT_MARKETPLACE)
+    return DEFAULT_MARKETPLACE
+
+
+def _build_add_product_schema(default_marketplace: str) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required("asin"): str,
+            vol.Required("name"): str,
+            vol.Required("marketplace", default=default_marketplace): vol.In(_MARKETPLACES),
+            vol.Optional("alert_threshold"): vol.Coerce(float),
+        }
+    )
 
 _STEP_WISHLIST_SCHEMA = vol.Schema(
     {
@@ -94,7 +118,9 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="add_product",
-            data_schema=_STEP_ADD_PRODUCT_SCHEMA,
+            data_schema=_build_add_product_schema(
+                _default_marketplace(self.hass.config.country)
+            ),
             errors=errors,
         )
 
