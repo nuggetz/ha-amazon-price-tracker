@@ -228,13 +228,16 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
     def _build_headers(self) -> dict:
         return {**HEADERS, "Accept-Language": self._market_config["language"]}
 
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            headers=self._build_headers(),
+            follow_redirects=True,
+            timeout=httpx.Timeout(REQUEST_TIMEOUT),
+        )
+
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                headers=self._build_headers(),
-                follow_redirects=True,
-                timeout=httpx.Timeout(REQUEST_TIMEOUT),
-            )
+            self._client = await self.hass.async_add_executor_job(self._create_client)
         return self._client
 
     async def async_shutdown(self) -> None:

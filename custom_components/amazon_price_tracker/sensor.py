@@ -33,7 +33,7 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
     """Price sensor for a single Amazon ASIN."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_has_entity_name = True
     # None = entity IS the device; avoids "Product Name Product Name" duplication
     _attr_name = None
