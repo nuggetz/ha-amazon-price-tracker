@@ -253,10 +253,12 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             response = await client.get(url)
             response.raise_for_status()
         except httpx.HTTPStatusError as err:
+            self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(
                 f"HTTP {err.response.status_code} for {self.asin}"
             ) from err
         except httpx.HTTPError as err:
+            self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(f"Network error for {self.asin}: {err}") from err
 
         try:
@@ -266,7 +268,8 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
                 )
             )
         except AmazonCaptchaError as err:
-            _LOGGER.warning("CAPTCHA for ASIN %s — will retry next cycle", self.asin)
+            _LOGGER.warning("CAPTCHA for ASIN %s — will retry in 30 min", self.asin)
+            self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(str(err)) from err
 
         jitter = random.uniform(-JITTER_SECONDS, JITTER_SECONDS)
