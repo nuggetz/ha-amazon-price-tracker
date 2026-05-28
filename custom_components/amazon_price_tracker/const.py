@@ -44,6 +44,12 @@ DOMAIN_CONFIG: dict[str, dict] = {
     "amazon.ca": {"currency": "CAD", "language": "en-CA,en;q=0.9,fr;q=0.8", "european_format": False},
     "amazon.co.jp": {"currency": "JPY", "language": "ja-JP,ja;q=0.9,en;q=0.8", "european_format": False},
     "amazon.com.au": {"currency": "AUD", "language": "en-AU,en;q=0.9", "european_format": False},
+    "amazon.com.br": {"currency": "BRL", "language": "pt-BR,pt;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.com.mx": {"currency": "MXN", "language": "es-MX,es;q=0.9,en;q=0.8", "european_format": False},
+    "amazon.in": {"currency": "INR", "language": "en-IN,en;q=0.9", "european_format": False},
+    "amazon.com.tr": {"currency": "TRY", "language": "tr-TR,tr;q=0.9,en;q=0.8", "european_format": True},
+    "amazon.ae": {"currency": "AED", "language": "en-AE,en;q=0.9,ar;q=0.8", "european_format": False},
+    "amazon.sg": {"currency": "SGD", "language": "en-SG,en;q=0.9", "european_format": False},
 }
 
 DEFAULT_MARKETPLACE = "amazon.it"

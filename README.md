@@ -14,7 +14,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 
 ## Features
 
-- **13 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US, CA, JP, AU — each with the correct currency and language
+- **19 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US, CA, JP, AU, BR, MX, IN, TR, AE, SG — each with the correct currency and language
 - **Auto-detected default marketplace**: the marketplace dropdown pre-selects the one matching your Home Assistant country setting — no manual change needed for non-Italian installs
 - Scrapes product pages without an Amazon account (JSON-LD first, CSS selectors as fallback)
 - One sensor per product, added via UI Config Flow — edit name and alert threshold at any time via Options Flow
@@ -43,6 +43,12 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 | amazon.ca | CAD |
 | amazon.co.jp | JPY |
 | amazon.com.au | AUD |
+| amazon.com.br | BRL |
+| amazon.com.mx | MXN |
+| amazon.in | INR |
+| amazon.com.tr | TRY |
+| amazon.ae | AED |
+| amazon.sg | SGD |
 
 ---
 
@@ -230,7 +236,7 @@ logger:
 
 - [x] Options Flow (edit name and threshold without removing the entry)
 - [x] `amazon_price_tracker.force_refresh` service call
-- [x] Multi-domain support (10 Amazon marketplaces)
+- [x] Multi-domain support (19 Amazon marketplaces)
 - [x] Real-time availability text
 - [x] Wishlist import — from Config Flow UI and from Developer Tools service
 - [ ] Proxy support for blocked IPs

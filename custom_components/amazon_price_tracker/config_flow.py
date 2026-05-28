@@ -33,6 +33,12 @@ _COUNTRY_TO_MARKETPLACE: dict[str, str] = {
     "CA": "amazon.ca",
     "JP": "amazon.co.jp",
     "AU": "amazon.com.au",
+    "BR": "amazon.com.br",
+    "MX": "amazon.com.mx",
+    "IN": "amazon.in",
+    "TR": "amazon.com.tr",
+    "AE": "amazon.ae",
+    "SG": "amazon.sg",
 }
 
 
