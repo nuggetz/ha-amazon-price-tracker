@@ -14,7 +14,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 
 ## Features
 
-- **19 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, US, CA, JP, AU, BR, MX, IN, TR, AE, SG — each with the correct currency and language
+- **20 Amazon marketplaces**: IT, DE, FR, ES, NL, BE, PL, SE, UK, IE, US, CA, JP, AU, BR, MX, IN, TR, AE, SG — each with the correct currency and language
 - **Auto-detected default marketplace**: the marketplace dropdown pre-selects the one matching your Home Assistant country setting — no manual change needed for non-Italian installs
 - Scrapes product pages without an Amazon account (JSON-LD first, CSS selectors as fallback)
 - One sensor per product, added via UI Config Flow — edit name and alert threshold at any time via Options Flow
@@ -39,6 +39,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 | amazon.pl | PLN |
 | amazon.se | SEK |
 | amazon.co.uk | GBP |
+| amazon.ie | EUR |
 | amazon.com | USD |
 | amazon.ca | CAD |
 | amazon.co.jp | JPY |
