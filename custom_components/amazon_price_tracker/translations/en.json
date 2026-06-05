@@ -17,7 +17,7 @@
           "alert_threshold": "Price alert threshold (optional)"
         },
         "data_description": {
-          "asin": "10-character ASIN code (e.g. B09FKN79QR)",
+          "asin": "10-character ASIN code (e.g. B09FKN79QR). Find it in the product URL after /dp/.",
           "name": "Name shown in Home Assistant",
           "marketplace": "Amazon website to track the price on (e.g. amazon.com, amazon.de)",
           "alert_threshold": "Price below which you want to trigger automations"
