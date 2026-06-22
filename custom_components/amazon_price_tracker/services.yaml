@@ -42,10 +42,17 @@ import_wishlist:
             - "amazon.pl"
             - "amazon.se"
             - "amazon.co.uk"
+            - "amazon.ie"
             - "amazon.com"
             - "amazon.ca"
             - "amazon.co.jp"
             - "amazon.com.au"
+            - "amazon.com.br"
+            - "amazon.com.mx"
+            - "amazon.in"
+            - "amazon.com.tr"
+            - "amazon.ae"
+            - "amazon.sg"
     alert_threshold:
       name: Default price alert threshold
       description: >

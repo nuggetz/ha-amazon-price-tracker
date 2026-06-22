@@ -40,6 +40,7 @@ DOMAIN_CONFIG: dict[str, dict] = {
     "amazon.pl": {"currency": "PLN", "language": "pl-PL,pl;q=0.9,en;q=0.8", "european_format": True},
     "amazon.se": {"currency": "SEK", "language": "sv-SE,sv;q=0.9,en;q=0.8", "european_format": True},
     "amazon.co.uk": {"currency": "GBP", "language": "en-GB,en;q=0.9", "european_format": False},
+    "amazon.ie": {"currency": "EUR", "language": "en-IE,en;q=0.9", "european_format": False},
     "amazon.com": {"currency": "USD", "language": "en-US,en;q=0.9", "european_format": False},
     "amazon.ca": {"currency": "CAD", "language": "en-CA,en;q=0.9,fr;q=0.8", "european_format": False},
     "amazon.co.jp": {"currency": "JPY", "language": "ja-JP,ja;q=0.9,en;q=0.8", "european_format": False},
