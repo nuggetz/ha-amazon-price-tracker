@@ -2,9 +2,13 @@
 
 ![Amazon Price Tracker logo](docs/amazon_price_tracker_logo.svg)
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.11%2B-blue)](https://www.home-assistant.io/)
+[![GitHub Release](https://img.shields.io/github/v/release/nuggetz/ha-amazon-price-tracker)](https://github.com/nuggetz/ha-amazon-price-tracker/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/nuggetz/ha-amazon-price-tracker?style=social)](https://github.com/nuggetz/ha-amazon-price-tracker/stargazers)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nuggetz&repository=ha-amazon-price-tracker&category=integration)
 
 Track Amazon product prices directly in Home Assistant — no PA-API or third-party account required.
 
@@ -57,9 +61,14 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 
 ### HACS (recommended)
 
-1. Open HACS → Integrations → ⋮ → Custom repositories
-2. Add `https://github.com/nuggetz/ha-amazon-price-tracker` — category **Integration**
-3. Install **Amazon Price Tracker** and restart Home Assistant
+**Amazon Price Tracker is now part of the default HACS store** — no custom repository needed.
+
+1. Open HACS → search for **Amazon Price Tracker**
+2. Click **Download** and restart Home Assistant
+
+Or use the one-click button:
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nuggetz&repository=ha-amazon-price-tracker&category=integration)
 
 ### Manual
 
@@ -237,11 +246,12 @@ logger:
 
 - [x] Options Flow (edit name and threshold without removing the entry)
 - [x] `amazon_price_tracker.force_refresh` service call
-- [x] Multi-domain support (19 Amazon marketplaces)
+- [x] Multi-domain support (20 Amazon marketplaces)
 - [x] Real-time availability text
 - [x] Wishlist import — from Config Flow UI and from Developer Tools service
+- [x] Accepted into the default HACS store 🎉
 - [ ] Proxy support for blocked IPs
-- [ ] GitHub Actions release workflow for HACS community store
+- [ ] Product image as `entity_picture` attribute
 
 ---
 
