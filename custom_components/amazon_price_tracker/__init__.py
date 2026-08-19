@@ -8,7 +8,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
@@ -56,23 +56,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         marketplace=marketplace,
     )
 
-    await coordinator.async_refresh()
-
-    if not coordinator.last_update_success:
-        if not coordinator.blocked_by_amazon:
-            raise ConfigEntryNotReady(str(coordinator.last_exception))
-        # Failing setup here would hand control to Home Assistant's setup-retry
-        # ladder, which retries far more aggressively than our own backoff — the
-        # worst possible answer to being rate-limited (see issue #1). Set the
-        # entry up instead and let the coordinator's schedule handle recovery.
-        _LOGGER.warning(
-            "Amazon is blocking %s while setting up %s. The sensor will stay "
-            "unavailable and retry on its own rather than failing setup.",
-            marketplace,
-            entry.data["asin"],
-        )
-
     coordinators[entry.entry_id] = coordinator
+
+    # The first fetch runs in the background rather than blocking setup.
+    #
+    # Two reasons. Requests to one marketplace are serialised and spaced, so
+    # awaiting here would make the last of N products wait N * ~12s inside
+    # async_setup_entry and trip Home Assistant's slow-setup warnings. And
+    # raising ConfigEntryNotReady on an anti-bot block would hand control to
+    # HA's setup-retry ladder, which retries far more aggressively than our own
+    # backoff — that is what produced 40 retries in five hours in issue #1.
+    #
+    # The sensor reports unavailable until the first fetch lands, and the
+    # coordinator's own schedule owns every retry from then on. A wrong ASIN is
+    # already caught by the config flow's reachability check, so nothing is lost
+    # by not failing setup here.
+    entry.async_create_background_task(
+        hass,
+        coordinator.async_refresh(),
+        name=f"{DOMAIN} initial refresh {entry.data['asin']}",
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
