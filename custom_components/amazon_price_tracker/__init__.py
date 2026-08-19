@@ -12,7 +12,8 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
-from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, HEADERS, WISHLIST_ID_RE
+from .client import async_create_client
+from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, WISHLIST_ID_RE
 from .coordinator import AmazonPriceCoordinator, parse_wishlist_page
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,20 +125,14 @@ def _make_import_wishlist_handler(hass: HomeAssistant):
             )
             marketplace = DEFAULT_MARKETPLACE
 
-        market_config = DOMAIN_CONFIG[marketplace]
-        headers = {**HEADERS, "Accept-Language": market_config["language"]}
         wishlist_url = f"https://www.{marketplace}/hz/wishlist/ls/{wishlist_id}"
 
         _LOGGER.debug("Fetching wishlist %s", wishlist_url)
 
+        client = await async_create_client(hass, marketplace, 30.0)
         try:
-            async with httpx.AsyncClient(
-                headers=headers,
-                follow_redirects=True,
-                timeout=httpx.Timeout(30.0),
-            ) as client:
-                response = await client.get(wishlist_url)
-                response.raise_for_status()
+            response = await client.get(wishlist_url)
+            response.raise_for_status()
         except httpx.HTTPStatusError as err:
             raise ServiceValidationError(
                 f"Cannot fetch wishlist (HTTP {err.response.status_code}). "
@@ -145,6 +140,8 @@ def _make_import_wishlist_handler(hass: HomeAssistant):
             ) from err
         except httpx.HTTPError as err:
             raise ServiceValidationError(f"Network error fetching wishlist: {err}") from err
+        finally:
+            await client.aclose()
 
         products = await hass.async_add_executor_job(parse_wishlist_page, response.text)
 

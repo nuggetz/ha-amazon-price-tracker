@@ -9,19 +9,31 @@ JITTER_SECONDS = 30 * 60
 
 ASIN_PATTERN = r"^[A-Z0-9]{10}$"
 
-# Base HTTP headers — Accept-Language is overridden per marketplace
+# Base HTTP headers — Accept-Language is overridden per marketplace.
+# Accept-Encoding is deliberately absent: httpx sets it from the codecs it can
+# actually decode, and advertising "br" without brotli installed yields a body
+# that decodes to binary garbage.
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "Chrome/140.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
     "Accept": (
         "text/html,application/xhtml+xml,application/xml;"
         "q=0.9,image/avif,image/webp,*/*;q=0.8"
     ),
-    "Accept-Encoding": "gzip, deflate, br",
+    # A request that claims to be Chrome should carry the client hints and the
+    # fetch metadata a Chrome top-level navigation actually sends; the mismatch
+    # is trivial for Amazon to spot.
+    "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
     "DNT": "1",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
@@ -60,6 +72,9 @@ PRICE_SELECTORS = [
     "#corePriceDisplay_desktop_feature_div span.a-offscreen",
     "#priceToPay span.a-offscreen",
     "#apex_desktop_newAccordionRow span.a-offscreen",
+    "#apex_desktop span.a-offscreen",
+    "#buybox span.a-price span.a-offscreen",
+    "#tp_price_block_total_price_ww span.a-offscreen",
     ".a-price .a-offscreen",
 ]
 
@@ -68,13 +83,28 @@ TITLE_SELECTORS = [
     "#title span",
 ]
 
-CAPTCHA_SIGNALS = [
+# Markers of an Amazon anti-bot page served with HTTP 200 instead of the
+# product. Matched case-insensitively against the raw HTML.
+# The first two are locale-independent — the "Continue shopping" interstitial
+# and the CAPTCHA wall both post to /errors_page/validateCaptcha in every
+# marketplace, so they catch localised variants the English strings miss.
+BOT_WALL_SIGNALS = [
+    "/errors_page/validatecaptcha",
+    "/errors/validatecaptcha",
+    "opfcaptcha-prod",
     "api-services-support@amazon.com",
     "robot check",
     "enter the characters you see below",
     "digita i caratteri che vedi",
     "type the characters you see in this image",
 ]
+
+# Deprecated alias kept for external callers.
+CAPTCHA_SIGNALS = BOT_WALL_SIGNALS
+
+# A real product page is hundreds of KB. Anything this small carrying neither a
+# title nor a price is an interstitial or error shell, not a product.
+MIN_PRODUCT_PAGE_BYTES = 100_000
 
 # Presence of this div means the product is out of stock
 OUT_OF_STOCK_SELECTOR = "#outOfStockBuyBox_feature_div"

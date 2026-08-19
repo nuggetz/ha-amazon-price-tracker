@@ -229,6 +229,36 @@ action:
 
 ---
 
+## Troubleshooting
+
+### `Amazon is blocking scraping for ASIN … — retrying in 30 min`
+
+Amazon answered with an anti-bot page instead of the product listing: either the
+CAPTCHA wall, or the "Click the button below to continue shopping" interstitial,
+which is served with HTTP 200 and looks like a normal page. The sensor goes
+unavailable and the integration retries every 30 minutes until Amazon serves the
+real page again.
+
+This is a decision made on Amazon's side about your IP address, not a bug in the
+parser. What helps:
+
+- **Wait.** Blocks on residential IPs are usually temporary.
+- **Track fewer products.** Every product is a separate request; a large wishlist
+  import makes a block far more likely.
+- **Check what else shares your IP.** A VPN exit node, a hosting/datacenter IP or
+  another scraper on the same connection will get you flagged much faster.
+
+Proxy support for permanently blocked IPs is on the roadmap.
+
+### `Could not parse price for ASIN … on what looks like a real product page`
+
+Amazon served a genuine listing but none of the price strategies matched — most
+likely a layout change on that marketplace. Enable debug logging (below), wait
+for the next refresh, and [open an issue](https://github.com/nuggetz/ha-amazon-price-tracker/issues)
+with the captured page; that log line contains the full HTML the parser saw.
+
+---
+
 ## Debug logging
 
 Add to your `configuration.yaml`:

@@ -12,16 +12,17 @@ from bs4 import BeautifulSoup
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .client import async_create_client
 from .const import (
     AVAILABILITY_SELECTOR,
     BASE_INTERVAL_SECONDS,
     BASE_URL,
-    CAPTCHA_SIGNALS,
+    BOT_WALL_SIGNALS,
     DEFAULT_MARKETPLACE,
     DOMAIN,
     DOMAIN_CONFIG,
-    HEADERS,
     JITTER_SECONDS,
+    MIN_PRODUCT_PAGE_BYTES,
     OUT_OF_STOCK_SELECTOR,
     PRICE_SELECTORS,
     REQUEST_TIMEOUT,
@@ -37,7 +38,7 @@ _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
 
 class AmazonCaptchaError(Exception):
-    pass
+    """Amazon served an anti-bot wall instead of the product page."""
 
 
 def parse_price(raw: str, european_format: bool = True) -> float | None:
@@ -69,12 +70,16 @@ def parse_product_page(
 
     Returns (price, title, is_available, availability_text).
     Runs synchronously — must be called via async_add_executor_job.
-    Raises AmazonCaptchaError if a CAPTCHA wall is detected.
+    Raises AmazonCaptchaError if Amazon served an anti-bot wall or any other
+    non-product page instead of the listing.
     """
     html_lower = html.lower()
-    for signal in CAPTCHA_SIGNALS:
+    for signal in BOT_WALL_SIGNALS:
         if signal in html_lower:
-            raise AmazonCaptchaError(f"CAPTCHA detected for {asin}")
+            raise AmazonCaptchaError(
+                f"Amazon served an anti-bot page instead of {asin} "
+                f"(matched {signal!r})"
+            )
 
     soup = BeautifulSoup(html, "html.parser")
 
@@ -150,12 +155,31 @@ def parse_product_page(
                     title = candidate
                     break
 
-    if price is None and is_available:
-        _LOGGER.warning(
-            "Could not parse price for ASIN %s — page snippet: %.300s",
-            asin,
-            html,
+    # Anti-bot interstitials keep changing their wording, so fall back to shape:
+    # a page carrying neither a price nor a title, far too small to be a product
+    # listing, is a wall or an error shell — not a product we failed to parse.
+    if price is None and title is None and len(html) < MIN_PRODUCT_PAGE_BYTES:
+        raise AmazonCaptchaError(
+            f"Amazon returned a non-product page for {asin} "
+            f"({len(html)} bytes, no title, no price)"
         )
+
+    if price is None and is_available:
+        # Dumping the first 300 chars only ever showed Amazon's boilerplate
+        # doctype. Report what actually helps triage instead, and keep the full
+        # page behind debug logging.
+        _LOGGER.warning(
+            "Could not parse price for ASIN %s on what looks like a real product "
+            "page (%d bytes, title=%r, availability=%r). Amazon may have changed "
+            "its layout — enable debug logging for %s and open an issue with the "
+            "captured page.",
+            asin,
+            len(html),
+            title,
+            availability_text,
+            __name__,
+        )
+        _LOGGER.debug("Unparsed product page for %s:\n%s", asin, html)
 
     return price, title, is_available, availability_text
 
@@ -225,19 +249,11 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         self._market_config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
         self._client: httpx.AsyncClient | None = None
 
-    def _build_headers(self) -> dict:
-        return {**HEADERS, "Accept-Language": self._market_config["language"]}
-
-    def _create_client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            headers=self._build_headers(),
-            follow_redirects=True,
-            timeout=httpx.Timeout(REQUEST_TIMEOUT),
-        )
-
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = await self.hass.async_add_executor_job(self._create_client)
+            self._client = await async_create_client(
+                self.hass, self.marketplace, REQUEST_TIMEOUT
+            )
         return self._client
 
     async def async_shutdown(self) -> None:
@@ -268,7 +284,11 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
                 )
             )
         except AmazonCaptchaError as err:
-            _LOGGER.warning("CAPTCHA for ASIN %s — will retry in 30 min", self.asin)
+            _LOGGER.warning(
+                "Amazon is blocking scraping for ASIN %s (%s) — retrying in 30 min",
+                self.asin,
+                err,
+            )
             self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(str(err)) from err
 

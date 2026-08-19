@@ -11,7 +11,8 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, HEADERS, WISHLIST_ID_RE
+from .client import async_create_client
+from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, WISHLIST_ID_RE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,22 +151,18 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if marketplace not in DOMAIN_CONFIG:
                     marketplace = DEFAULT_MARKETPLACE
 
-                market_config = DOMAIN_CONFIG[marketplace]
-                headers = {**HEADERS, "Accept-Language": market_config["language"]}
                 wishlist_url = f"https://www.{marketplace}/hz/wishlist/ls/{wishlist_id}"
 
+                client = await async_create_client(self.hass, marketplace, 30.0)
                 try:
-                    async with httpx.AsyncClient(
-                        headers=headers,
-                        follow_redirects=True,
-                        timeout=httpx.Timeout(30.0),
-                    ) as client:
-                        response = await client.get(wishlist_url)
-                        response.raise_for_status()
+                    response = await client.get(wishlist_url)
+                    response.raise_for_status()
                 except httpx.HTTPStatusError:
                     errors["base"] = "wishlist_not_found"
                 except httpx.HTTPError:
                     errors["base"] = "cannot_connect"
+                finally:
+                    await client.aclose()
 
                 if not errors:
                     from .coordinator import parse_wishlist_page  # avoid circular import
@@ -208,20 +205,16 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _check_reachable(self, asin: str, marketplace: str) -> bool:
-        config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
-        headers = {**HEADERS, "Accept-Language": config["language"]}
         url = f"https://www.{marketplace}/dp/{asin}"
+        client = await async_create_client(self.hass, marketplace, 10.0)
         try:
-            async with httpx.AsyncClient(
-                headers=headers,
-                follow_redirects=True,
-                timeout=httpx.Timeout(10.0),
-            ) as client:
-                response = await client.get(url)
-                return response.status_code == 200
+            response = await client.get(url)
+            return response.status_code == 200
         except httpx.HTTPError as err:
             _LOGGER.warning("Connectivity check failed for %s on %s: %s", asin, marketplace, err)
             return False
+        finally:
+            await client.aclose()
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
         """Create an entry from the import_wishlist service — no network check."""
