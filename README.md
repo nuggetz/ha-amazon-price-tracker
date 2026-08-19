@@ -25,7 +25,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 - Tracks historical minimum price, persisted across HA restarts
 - Real-time stock status: `is_available` bool + `availability_text` from Amazon (e.g. "Only 2 left in stock")
 - `amazon_price_tracker.force_refresh` service for on-demand price updates
-- Anti-fingerprinting: randomised polling interval (~4 h ± 30 min)
+- Polite by design: one shared browsing session per marketplace, spaced-out requests, randomised polling (~4 h ± 30 min), and an automatic pause when Amazon pushes back
 - No external database, no Amazon account needed
 
 ---
@@ -134,6 +134,58 @@ Each product creates one sensor entity under a dedicated device.
 
 ---
 
+## How it works, and why updates sometimes pause
+
+Worth two minutes, because it explains almost every surprise you might hit.
+
+**There is no Amazon API here.** No key, no account, no affiliate program. The
+integration opens the same public product page your browser would and reads the
+price off it. That is what makes it work without any setup — and it is also the
+whole source of its one real limitation.
+
+**Amazon watches for automated reading, and it watches per IP address.** When it
+decides a request doesn't look like a person browsing, it doesn't return an
+error. It returns a normal-looking page — a CAPTCHA, or a "Click the button below
+to continue shopping" screen — with no price on it. Every tracked product on that
+marketplace is affected at once, because they all come from your one address.
+
+**So the integration tries hard to look like one person, not twenty robots.**
+All your products on a marketplace share a single browsing session: one set of
+cookies, warmed up by loading the homepage first, exactly as a browser does before
+you click a product. Requests go out one at a time with a randomised 8–15 second
+gap, so ten products never arrive as a simultaneous burst. And if Amazon pushes
+back anyway, everything on that marketplace goes quiet for about half an hour
+rather than the other products queueing up to collect a block each.
+
+### What you'll actually notice
+
+- **A product you just added shows `unavailable` for a moment.** Normal — the
+  first price fetch runs in the background, and with several products the last
+  one can take a couple of minutes.
+- **Sensors occasionally go `unavailable` and come back on their own.** That's the
+  pause doing its job. No action needed.
+- **Prices update roughly every four hours, never on a fixed clock.** Deliberate.
+
+### If it stays blocked
+
+That's Amazon's decision about your IP address, and no amount of parsing on this
+side can override it — if the request never reaches the product page, there is
+nothing to read. What actually helps:
+
+- **Wait.** Home broadband addresses usually get temporary challenges that clear
+  by themselves within hours or days.
+- **Track fewer products.** Each one is still its own request.
+- **Check what your connection goes out through.** VPN exit nodes and
+  datacenter/hosting IPs are flagged far harder than home connections, and often
+  stay flagged. On a shared address you also inherit what everyone else on it has
+  been doing.
+
+To see where you stand, open the product URL in a private browser window on the
+same network. If you get the "Continue shopping" page there too, the block is at
+IP level and waiting is the answer.
+
+---
+
 ## Services
 
 ### `amazon_price_tracker.import_wishlist`
@@ -236,35 +288,19 @@ action:
 
 ### `Amazon blocked amazon.xx — pausing every product on this marketplace for N minutes`
 
-Amazon answered with an anti-bot page instead of a product listing: either the
-CAPTCHA wall, or the "Click the button below to continue shopping" interstitial,
-which is served with HTTP 200 and looks like a normal page.
-
-The whole marketplace goes quiet for about 30 minutes. That is deliberate — if
-Amazon is challenging your IP, having the other tracked products keep asking is
-the fastest way to make the block worse. Sensors on that marketplace go
-unavailable and recover on their own once the pause expires.
-
-This is a decision made on Amazon's side about your IP address, not a bug in the
-parser. What helps:
-
-- **Wait.** Blocks on residential IPs are usually temporary.
-- **Track fewer products.** Every product is still its own request.
-- **Check what else shares your IP.** A VPN exit node, a hosting/datacenter IP or
-  another scraper on the same connection will get you flagged much faster.
-
-If you want to know where you stand, open the product URL in a private window on
-the same network. If you get the interstitial there too, the block is at IP level.
+Amazon answered with an anti-bot page instead of a product listing. Every product
+on that marketplace pauses for about 30 minutes and then recovers on its own —
+nothing to do, and nothing is broken. See
+[How it works](#how-it-works-and-why-updates-sometimes-pause) for why the pause is
+deliberate and what to try if it keeps happening.
 
 ### A newly added product stays `unavailable` for a while
 
-Expected. The first fetch runs in the background rather than blocking setup, and
-requests to one marketplace are spaced 8–15s apart, so with several products the
-last one can take a couple of minutes to populate. If Amazon is blocking that
-marketplace, the sensor stays unavailable until the pause expires and then
-recovers on its own — setup is deliberately never failed for a block, because
-that would hand control to Home Assistant's setup-retry ladder, which retries far
-more aggressively than the integration's own backoff.
+Expected — the first fetch runs in the background and requests are spaced out, so
+with several products the last one can take a couple of minutes to populate.
+Setup is deliberately never failed when Amazon is blocking, because that would
+hand control to Home Assistant's setup-retry ladder, which retries far more
+aggressively than the integration's own backoff.
 
 ### `Could not parse price for ASIN … on what looks like a real product page`
 

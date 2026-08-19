@@ -3,65 +3,65 @@
     "step": {
       "user": {
         "menu_options": {
-          "add_product": "Aggiungi prodotto",
-          "import_wishlist": "Importa da lista desideri"
+          "add_product": "Add product",
+          "import_wishlist": "Import from wishlist"
         }
       },
       "add_product": {
-        "title": "Aggiungi prodotto Amazon",
-        "description": "Inserisci i dati del prodotto da monitorare.",
+        "title": "Add Amazon product",
+        "description": "Enter the details of the product to monitor.",
         "data": {
           "asin": "ASIN",
-          "name": "Nome personalizzato",
-          "marketplace": "Marketplace Amazon",
-          "alert_threshold": "Soglia prezzo alert (opzionale)"
+          "name": "Custom name",
+          "marketplace": "Amazon marketplace",
+          "alert_threshold": "Price alert threshold (optional)"
         },
         "data_description": {
-          "asin": "Codice ASIN di 10 caratteri (es. B09FKN79QR). Si trova nell'URL del prodotto dopo /dp/.",
-          "name": "Nome che verrà mostrato in Home Assistant",
-          "marketplace": "Sito Amazon su cui monitorare il prezzo (es. amazon.it, amazon.de)",
-          "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni"
+          "asin": "10-character ASIN code (e.g. B09FKN79QR). Find it in the product URL after /dp/.",
+          "name": "Name shown in Home Assistant",
+          "marketplace": "Amazon website to track the price on (e.g. amazon.com, amazon.de)",
+          "alert_threshold": "Price below which you want to trigger automations"
         }
       },
       "import_wishlist": {
-        "title": "Importa lista desideri Amazon",
-        "description": "Inserisci l'URL della lista desideri pubblica. Verranno creati sensori per tutti i prodotti trovati.",
+        "title": "Import Amazon wishlist",
+        "description": "Enter the URL of a public Amazon wishlist. A sensor will be created for each product found.",
         "data": {
-          "url": "URL lista desideri",
-          "alert_threshold": "Soglia prezzo alert per tutti i prodotti (opzionale)"
+          "url": "Wishlist URL",
+          "alert_threshold": "Price alert threshold for all products (optional)"
         },
         "data_description": {
-          "url": "URL completo della lista desideri pubblica. La lista deve essere impostata come Pubblica su Amazon.",
-          "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito."
+          "url": "Full URL of the public wishlist. The wishlist must be set to Public on Amazon.",
+          "alert_threshold": "Threshold applied to all imported products. Can be changed per-product later."
         }
       }
     },
     "error": {
-      "invalid_asin": "ASIN non valido. Deve essere esattamente 10 caratteri alfanumerici (A-Z, 0-9).",
-      "already_configured": "Questo ASIN è già monitorato.",
-      "cannot_connect": "Impossibile raggiungere Amazon. Controlla la connessione di rete.",
-      "invalid_wishlist_url": "URL della lista desideri non valido. Assicurati di copiare l'URL completo della lista pubblica Amazon.",
-      "wishlist_not_found": "Lista desideri non trovata o impostata come Privata su Amazon.",
-      "wishlist_empty": "Nessun prodotto trovato nella lista. La lista potrebbe essere vuota o privata.",
-      "amazon_blocked": "Amazon sta bloccando le richieste dal tuo indirizzo IP. Attendi un po' e riprova."
+      "invalid_asin": "Invalid ASIN. Must be exactly 10 alphanumeric characters (A-Z, 0-9).",
+      "already_configured": "This ASIN is already being monitored.",
+      "cannot_connect": "Cannot reach Amazon. Check your network connection.",
+      "invalid_wishlist_url": "Invalid wishlist URL. Make sure you copy the full URL of a public Amazon wishlist.",
+      "wishlist_not_found": "Wishlist not found or set to Private on Amazon.",
+      "wishlist_empty": "No products found in the wishlist. It may be empty or set to Private.",
+      "amazon_blocked": "Amazon is currently blocking requests from your IP address. Wait a while and try again."
     },
     "abort": {
-      "already_configured": "Questo ASIN è già configurato.",
-      "wishlist_imported": "Importazione completata: {added} prodotti aggiunti su {total} trovati."
+      "already_configured": "This ASIN is already configured.",
+      "wishlist_imported": "Import complete: {added} products added out of {total} found."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Modifica prodotto",
-        "description": "Aggiorna il nome o la soglia di prezzo. L'ASIN non è modificabile.",
+        "title": "Edit product",
+        "description": "Update the name or price threshold. The ASIN cannot be changed.",
         "data": {
-          "name": "Nome personalizzato",
-          "alert_threshold": "Soglia prezzo alert in EUR (opzionale)"
+          "name": "Custom name",
+          "alert_threshold": "Price alert threshold in EUR (optional)"
         },
         "data_description": {
-          "name": "Nome che verrà mostrato in Home Assistant",
-          "alert_threshold": "Lascia vuoto per rimuovere la soglia"
+          "name": "Name shown in Home Assistant",
+          "alert_threshold": "Leave empty to remove the threshold"
         }
       }
     }
