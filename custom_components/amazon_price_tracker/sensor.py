@@ -14,7 +14,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG
+from .const import COORDINATORS, DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG
 from .coordinator import AmazonPriceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: AmazonPriceCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AmazonPriceCoordinator = hass.data[DOMAIN][COORDINATORS][entry.entry_id]
     async_add_entities([AmazonPriceSensor(coordinator, entry)])
 
 

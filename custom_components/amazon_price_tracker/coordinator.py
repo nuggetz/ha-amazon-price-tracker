@@ -12,7 +12,6 @@ from bs4 import BeautifulSoup
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .client import async_create_client
 from .const import (
     AVAILABILITY_SELECTOR,
     BASE_INTERVAL_SECONDS,
@@ -25,20 +24,17 @@ from .const import (
     MIN_PRODUCT_PAGE_BYTES,
     OUT_OF_STOCK_SELECTOR,
     PRICE_SELECTORS,
-    REQUEST_TIMEOUT,
     TITLE_SELECTORS,
     WISHLIST_ID_RE,
 )
+from .exceptions import AmazonBlockedError, AmazonCaptchaError
+from .session import AmazonSession, async_get_session
 
 _LOGGER = logging.getLogger(__name__)
 
 _CURRENCY_SYMBOLS = ("€", "£", "$", "¥", "kr", "zł", "EUR", "GBP", "USD", "JPY", "CAD", "AUD", "PLN", "SEK")
 _ASIN_IN_HREF_RE = re.compile(r"/dp/([A-Z0-9]{10})")
 _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
-
-
-class AmazonCaptchaError(Exception):
-    """Amazon served an anti-bot wall instead of the product page."""
 
 
 def parse_price(raw: str, european_format: bool = True) -> float | None:
@@ -247,33 +243,41 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         self.product_name = name
         self.marketplace = marketplace
         self._market_config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
-        self._client: httpx.AsyncClient | None = None
+        # True when the last failure was Amazon blocking us rather than a
+        # network or configuration problem. Setup reads this to decide whether
+        # the entry is genuinely not ready or merely walled for now.
+        self.blocked_by_amazon = False
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            self._client = await async_create_client(
-                self.hass, self.marketplace, REQUEST_TIMEOUT
-            )
-        return self._client
-
-    async def async_shutdown(self) -> None:
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+    @property
+    def session(self) -> AmazonSession:
+        """The session shared by every product on this marketplace."""
+        return async_get_session(self.hass, self.marketplace)
 
     async def _async_update_data(self) -> dict:
         url = BASE_URL.format(marketplace=self.marketplace, asin=self.asin)
         european_format: bool = self._market_config["european_format"]
 
+        session = self.session
+
         try:
-            client = await self._get_client()
-            response = await client.get(url)
+            response = await session.async_get(url)
             response.raise_for_status()
+        except AmazonBlockedError as err:
+            # The marketplace is already in cooldown — no request was sent and
+            # there is no new block to record. Stay quiet; the session logged
+            # the block once, for all products, when it happened.
+            self.blocked_by_amazon = True
+            _LOGGER.debug("Skipped %s: %s", self.asin, err)
+            self.update_interval = timedelta(minutes=30)
+            raise UpdateFailed(str(err)) from err
         except httpx.HTTPStatusError as err:
+            self.blocked_by_amazon = False
             self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(
                 f"HTTP {err.response.status_code} for {self.asin}"
             ) from err
         except httpx.HTTPError as err:
+            self.blocked_by_amazon = False
             self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(f"Network error for {self.asin}: {err}") from err
 
@@ -283,14 +287,16 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
                     parse_product_page, response.text, self.asin, european_format
                 )
             )
-        except AmazonCaptchaError as err:
-            _LOGGER.warning(
-                "Amazon is blocking scraping for ASIN %s (%s) — retrying in 30 min",
-                self.asin,
-                err,
-            )
+        except AmazonBlockedError as err:
+            # We spent a request and got a wall: put the whole marketplace in
+            # cooldown so the other products don't each collect one too.
+            _LOGGER.debug("Anti-bot page for %s: %s", self.asin, err)
+            self.blocked_by_amazon = True
+            await session.async_note_block()
             self.update_interval = timedelta(minutes=30)
             raise UpdateFailed(str(err)) from err
+
+        self.blocked_by_amazon = False
 
         jitter = random.uniform(-JITTER_SECONDS, JITTER_SECONDS)
         self.update_interval = timedelta(seconds=BASE_INTERVAL_SECONDS + jitter)

@@ -11,8 +11,9 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .client import async_create_client
 from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, WISHLIST_ID_RE
+from .exceptions import AmazonBlockedError
+from .session import async_get_session
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -153,16 +154,16 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 wishlist_url = f"https://www.{marketplace}/hz/wishlist/ls/{wishlist_id}"
 
-                client = await async_create_client(self.hass, marketplace, 30.0)
+                session = async_get_session(self.hass, marketplace)
                 try:
-                    response = await client.get(wishlist_url)
+                    response = await session.async_get(wishlist_url)
                     response.raise_for_status()
+                except AmazonBlockedError:
+                    errors["base"] = "amazon_blocked"
                 except httpx.HTTPStatusError:
                     errors["base"] = "wishlist_not_found"
                 except httpx.HTTPError:
                     errors["base"] = "cannot_connect"
-                finally:
-                    await client.aclose()
 
                 if not errors:
                     from .coordinator import parse_wishlist_page  # avoid circular import
@@ -206,15 +207,17 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _check_reachable(self, asin: str, marketplace: str) -> bool:
         url = f"https://www.{marketplace}/dp/{asin}"
-        client = await async_create_client(self.hass, marketplace, 10.0)
         try:
-            response = await client.get(url)
+            response = await async_get_session(self.hass, marketplace).async_get(url)
             return response.status_code == 200
+        except AmazonBlockedError as err:
+            # Amazon is walling us, not evidence that the ASIN is wrong. Let the
+            # entry be created; the coordinator will pick the price up later.
+            _LOGGER.warning("Skipping reachability check for %s: %s", asin, err)
+            return True
         except httpx.HTTPError as err:
             _LOGGER.warning("Connectivity check failed for %s on %s: %s", asin, marketplace, err)
             return False
-        finally:
-            await client.aclose()
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
         """Create an entry from the import_wishlist service — no network check."""

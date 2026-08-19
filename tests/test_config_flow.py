@@ -32,13 +32,12 @@ def mock_setup_entry():
         yield mock
 
 
-def _mock_client(**kwargs) -> AsyncMock:
-    """Stand-in for the httpx.AsyncClient built by client.async_create_client."""
-    client = AsyncMock()
-    client.aclose = AsyncMock()
+def _mock_session(**kwargs) -> MagicMock:
+    """Stand-in for the shared AmazonSession returned by async_get_session."""
+    session = MagicMock()
     for key, value in kwargs.items():
-        setattr(client, key, value)
-    return client
+        setattr(session, key, value)
+    return session
 
 
 @pytest.fixture
@@ -187,11 +186,11 @@ async def test_import_wishlist_success(hass: HomeAssistant, mock_setup_entry):
     mock_response.raise_for_status = MagicMock()
     mock_response.text = WISHLIST_HTML
 
-    client = _mock_client(get=AsyncMock(return_value=mock_response))
+    session = _mock_session(async_get=AsyncMock(return_value=mock_response))
 
     with patch(
-        "custom_components.amazon_price_tracker.config_flow.async_create_client",
-        return_value=client,
+        "custom_components.amazon_price_tracker.config_flow.async_get_session",
+        return_value=session,
     ):
 
         result = await hass.config_entries.flow.async_init(
@@ -209,17 +208,19 @@ async def test_import_wishlist_success(hass: HomeAssistant, mock_setup_entry):
     assert result["reason"] == "wishlist_imported"
     assert result["description_placeholders"]["added"] == "2"
     assert result["description_placeholders"]["total"] == "2"
-    client.aclose.assert_awaited_once()
+    session.async_get.assert_awaited_once()
 
 
 async def test_import_wishlist_http_error(hass: HomeAssistant, mock_setup_entry):
     import httpx
 
-    client = _mock_client(get=AsyncMock(side_effect=httpx.ConnectError("timeout")))
+    session = _mock_session(
+        async_get=AsyncMock(side_effect=httpx.ConnectError("timeout"))
+    )
 
     with patch(
-        "custom_components.amazon_price_tracker.config_flow.async_create_client",
-        return_value=client,
+        "custom_components.amazon_price_tracker.config_flow.async_get_session",
+        return_value=session,
     ):
 
         result = await hass.config_entries.flow.async_init(
@@ -235,7 +236,6 @@ async def test_import_wishlist_http_error(hass: HomeAssistant, mock_setup_entry)
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"].get("base") == "cannot_connect"
-    client.aclose.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

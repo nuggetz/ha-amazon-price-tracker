@@ -8,13 +8,20 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
-from .client import async_create_client
-from .const import DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG, WISHLIST_ID_RE
+from .const import (
+    COORDINATORS,
+    DEFAULT_MARKETPLACE,
+    DOMAIN,
+    DOMAIN_CONFIG,
+    WISHLIST_ID_RE,
+)
 from .coordinator import AmazonPriceCoordinator, parse_wishlist_page
+from .exceptions import AmazonBlockedError
+from .session import async_close_sessions, async_get_session
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +42,7 @@ _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.setdefault(DOMAIN, {})
+    coordinators = hass.data.setdefault(DOMAIN, {}).setdefault(COORDINATORS, {})
 
     # Options override the original data for mutable fields (name, alert_threshold)
     name = entry.options.get("name", entry.data["name"])
@@ -49,9 +56,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         marketplace=marketplace,
     )
 
-    await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    if not coordinator.last_update_success:
+        if not coordinator.blocked_by_amazon:
+            raise ConfigEntryNotReady(str(coordinator.last_exception))
+        # Failing setup here would hand control to Home Assistant's setup-retry
+        # ladder, which retries far more aggressively than our own backoff — the
+        # worst possible answer to being rate-limited (see issue #1). Set the
+        # entry up instead and let the coordinator's schedule handle recovery.
+        _LOGGER.warning(
+            "Amazon is blocking %s while setting up %s. The sensor will stay "
+            "unavailable and retry on its own rather than failing setup.",
+            marketplace,
+            entry.data["asin"],
+        )
+
+    coordinators[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -79,7 +100,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 def _make_force_refresh_handler(hass: HomeAssistant):
     async def _handle_force_refresh(call: ServiceCall) -> None:
-        domain_data: dict[str, AmazonPriceCoordinator] = hass.data.get(DOMAIN, {})
+        domain_data: dict[str, AmazonPriceCoordinator] = hass.data.get(DOMAIN, {}).get(
+            COORDINATORS, {}
+        )
         entity_ids: list[str] | None = call.data.get("entity_id")
 
         if not entity_ids:
@@ -129,10 +152,13 @@ def _make_import_wishlist_handler(hass: HomeAssistant):
 
         _LOGGER.debug("Fetching wishlist %s", wishlist_url)
 
-        client = await async_create_client(hass, marketplace, 30.0)
         try:
-            response = await client.get(wishlist_url)
+            response = await async_get_session(hass, marketplace).async_get(wishlist_url)
             response.raise_for_status()
+        except AmazonBlockedError as err:
+            raise ServiceValidationError(
+                f"Amazon is currently blocking requests to {marketplace}: {err}"
+            ) from err
         except httpx.HTTPStatusError as err:
             raise ServiceValidationError(
                 f"Cannot fetch wishlist (HTTP {err.response.status_code}). "
@@ -140,8 +166,6 @@ def _make_import_wishlist_handler(hass: HomeAssistant):
             ) from err
         except httpx.HTTPError as err:
             raise ServiceValidationError(f"Network error fetching wishlist: {err}") from err
-        finally:
-            await client.aclose()
 
         products = await hass.async_add_executor_job(parse_wishlist_page, response.text)
 
@@ -189,11 +213,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        coordinator: AmazonPriceCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinators: dict[str, AmazonPriceCoordinator] = hass.data[DOMAIN][COORDINATORS]
+        coordinator = coordinators.pop(entry.entry_id)
         await coordinator.async_shutdown()
 
-        # Remove services when the last entry is unloaded
-        if not hass.data[DOMAIN]:
+        # Remove services and drop the shared sessions when the last entry goes
+        if not coordinators:
+            await async_close_sessions(hass)
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
             hass.services.async_remove(DOMAIN, SERVICE_IMPORT_WISHLIST)
 
