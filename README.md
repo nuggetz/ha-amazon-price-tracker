@@ -220,7 +220,10 @@ action:
 ## Technical notes
 
 - Default marketplace is auto-detected from `hass.config.country` (ISO 3166-1 alpha-2); falls back to `amazon.it` if unset
-- Polling every ~4 hours with ±30 min jitter (reduces Amazon fingerprinting)
+- Polling every ~4 hours with ±30 min jitter
+- **One shared session per marketplace**, not per product: a single cookie jar and connection pool, warmed up from the homepage, so tracked products look like one visitor browsing rather than N unrelated ones
+- Requests to the same marketplace are serialised and spaced 8–15s apart, so products never arrive as a synchronised burst
+- A block pauses every product on that marketplace for ~30 min (circuit breaker) instead of each one collecting its own
 - Direct HTML scraping: JSON-LD structured data first, CSS selectors as fallback, composite whole+fraction as last resort
 - `min_price` uses `RestoreSensor` — survives HA restarts without an external DB
 - HTTP client: `httpx` async (not `aiohttp`, to avoid version conflicts with HA internals)
@@ -231,24 +234,34 @@ action:
 
 ## Troubleshooting
 
-### `Amazon is blocking scraping for ASIN … — retrying in 30 min`
+### `Amazon blocked amazon.xx — pausing every product on this marketplace for N minutes`
 
-Amazon answered with an anti-bot page instead of the product listing: either the
+Amazon answered with an anti-bot page instead of a product listing: either the
 CAPTCHA wall, or the "Click the button below to continue shopping" interstitial,
-which is served with HTTP 200 and looks like a normal page. The sensor goes
-unavailable and the integration retries every 30 minutes until Amazon serves the
-real page again.
+which is served with HTTP 200 and looks like a normal page.
+
+The whole marketplace goes quiet for about 30 minutes. That is deliberate — if
+Amazon is challenging your IP, having the other tracked products keep asking is
+the fastest way to make the block worse. Sensors on that marketplace go
+unavailable and recover on their own once the pause expires.
 
 This is a decision made on Amazon's side about your IP address, not a bug in the
 parser. What helps:
 
 - **Wait.** Blocks on residential IPs are usually temporary.
-- **Track fewer products.** Every product is a separate request; a large wishlist
-  import makes a block far more likely.
+- **Track fewer products.** Every product is still its own request.
 - **Check what else shares your IP.** A VPN exit node, a hosting/datacenter IP or
   another scraper on the same connection will get you flagged much faster.
 
-Proxy support for permanently blocked IPs is on the roadmap.
+If you want to know where you stand, open the product URL in a private window on
+the same network. If you get the interstitial there too, the block is at IP level.
+
+### `Amazon is blocking amazon.xx while setting up <ASIN>`
+
+The block landed while a product was being added. The entry is created anyway and
+the sensor stays unavailable until the pause expires — deliberately, because
+failing setup would hand control to Home Assistant's setup-retry ladder, which
+retries far more aggressively than the integration's own backoff.
 
 ### `Could not parse price for ASIN … on what looks like a real product page`
 
@@ -280,6 +293,7 @@ logger:
 - [x] Real-time availability text
 - [x] Wishlist import — from Config Flow UI and from Developer Tools service
 - [x] Accepted into the default HACS store 🎉
+- [x] Shared session per marketplace, request spacing and circuit breaker
 - [ ] Proxy support for blocked IPs
 - [ ] Product image as `entity_picture` attribute
 

@@ -1,11 +1,30 @@
 DOMAIN = "amazon_price_tracker"
 
+# hass.data[DOMAIN] layout
+COORDINATORS = "coordinators"
+SESSIONS = "sessions"
+
 # URL template — marketplace and asin are injected at runtime
 BASE_URL = "https://www.{marketplace}/dp/{asin}"
 REQUEST_TIMEOUT = 30
 
 BASE_INTERVAL_SECONDS = 4 * 3600
 JITTER_SECONDS = 30 * 60
+
+# One shared session per marketplace serialises its requests and spaces them
+# out, so N tracked products stop arriving as a synchronised burst from one IP.
+MIN_REQUEST_SPACING = 8.0
+MAX_REQUEST_SPACING = 15.0
+
+# Pause between the homepage warm-up and the product request that follows it,
+# roughly the time a person spends before clicking through.
+MIN_WARMUP_PAUSE = 1.5
+MAX_WARMUP_PAUSE = 4.0
+
+# After a block, the whole marketplace goes quiet for this long instead of every
+# tracked product collecting its own wall in turn.
+BLOCK_COOLDOWN_SECONDS = 30 * 60
+BLOCK_COOLDOWN_JITTER = 10 * 60
 
 ASIN_PATTERN = r"^[A-Z0-9]{10}$"
 

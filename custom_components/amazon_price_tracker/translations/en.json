@@ -42,7 +42,8 @@
       "cannot_connect": "Cannot reach Amazon. Check your network connection.",
       "invalid_wishlist_url": "Invalid wishlist URL. Make sure you copy the full URL of a public Amazon wishlist.",
       "wishlist_not_found": "Wishlist not found or set to Private on Amazon.",
-      "wishlist_empty": "No products found in the wishlist. It may be empty or set to Private."
+      "wishlist_empty": "No products found in the wishlist. It may be empty or set to Private.",
+      "amazon_blocked": "Amazon is currently blocking requests from your IP address. Wait a while and try again."
     },
     "abort": {
       "already_configured": "This ASIN is already configured.",
