@@ -48,6 +48,30 @@ api-services-support@amazon.com</p>
 </body></html>
 """
 
+# Amazon's "Continue shopping" interstitial: HTTP 200, no product, no CAPTCHA
+# wording. Localised in every marketplace except the form action. See issue #4.
+HTML_CONTINUE_SHOPPING = """
+<!DOCTYPE html>
+<html class="a-no-js" lang="it"><head><title dir="ltr">Amazon.it</title></head>
+<body>
+<div class="a-box a-alert a-alert-info">
+  <h4>Fai clic sul pulsante qui sotto per continuare a fare acquisti</h4>
+</div>
+<form method="get" action="/errors_page/validateCaptcha" name="">
+  <button type="submit" class="a-button-text">Continua con gli acquisti</button>
+</form>
+</body></html>
+"""
+
+# Same shape, but stripped of every known marker — only the structural check
+# (no title, no price, far too small) can catch it.
+HTML_UNKNOWN_WALL = """
+<!DOCTYPE html>
+<html class="a-no-js" lang="en-us"><head><title dir="ltr">Amazon.com</title></head>
+<body><div class="a-box"><h4>Something new we have never seen</h4></div></body>
+</html>
+"""
+
 HTML_OUT_OF_STOCK = """
 <html><body>
 <span id="productTitle">Sold Out GPU</span>
@@ -144,6 +168,30 @@ def test_parse_product_page_fraction_fallback():
 def test_parse_product_page_captcha():
     with pytest.raises(AmazonCaptchaError):
         parse_product_page(HTML_CAPTCHA, "B09FKN79QR", european_format=True)
+
+
+def test_parse_product_page_continue_shopping_wall():
+    """The localised "Continue shopping" interstitial is an anti-bot wall."""
+    with pytest.raises(AmazonCaptchaError, match="validatecaptcha"):
+        parse_product_page(HTML_CONTINUE_SHOPPING, "B0C5M9H9DN", european_format=True)
+
+
+def test_parse_product_page_unknown_wall_caught_structurally():
+    """A wall with no known marker still fails on shape, not silently."""
+    with pytest.raises(AmazonCaptchaError, match="non-product page"):
+        parse_product_page(HTML_UNKNOWN_WALL, "B0C5M9H9DN", european_format=False)
+
+
+def test_parse_product_page_title_without_price_is_not_a_wall(caplog):
+    """A real listing we simply cannot price warns — it must not raise."""
+    html = "<html><body><span id='productTitle'>Real Product</span></body></html>"
+    price, title, is_available, _ = parse_product_page(
+        html, "B0TEST12AB", european_format=True
+    )
+    assert price is None
+    assert title == "Real Product"
+    assert is_available is True
+    assert "Could not parse price" in caplog.text
 
 
 def test_parse_product_page_out_of_stock():
