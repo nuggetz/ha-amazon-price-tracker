@@ -249,7 +249,9 @@ hours_to_show: 720
 
 ---
 
-## Price alert automation
+## Price alert automations
+
+### One product
 
 ```yaml
 alias: "RAM price drop alert"
@@ -266,6 +268,66 @@ action:
         dropped to {{ states('sensor.kingston_32gb_ddr5') }}
         (threshold: {{ state_attr('sensor.kingston_32gb_ddr5', 'alert_threshold') }})
 ```
+
+### Every product, with a single automation
+
+Home Assistant's `state` and `numeric_state` triggers need a static list of entity
+IDs, so covering every tracked product means triggering on `state_changed` and
+filtering by integration in the condition. Products you add later are picked up
+automatically — no automation to edit.
+
+```yaml
+alias: "Amazon price drop — all products"
+mode: queued
+max: 25
+
+triggers:
+  - trigger: event
+    event_type: state_changed
+
+conditions:
+  - condition: template
+    value_template: >
+      {% set new = trigger.event.data.new_state %}
+      {% set old = trigger.event.data.old_state %}
+      {% set threshold = new.attributes.get('alert_threshold') if new else none %}
+      {{ trigger.event.data.entity_id in integration_entities('amazon_price_tracker')
+         and new is not none
+         and threshold is not none
+         and new.state not in ['unknown', 'unavailable']
+         and new.state | float(0) <= threshold | float(0)
+         and (old is none
+              or old.state in ['unknown', 'unavailable']
+              or old.state | float(0) > threshold | float(0)) }}
+
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: "Price drop"
+      message: >
+        {{ trigger.event.data.new_state.attributes.title }} is now
+        {{ trigger.event.data.new_state.state }}
+        {{ trigger.event.data.new_state.attributes.unit_of_measurement }}
+        (threshold: {{ trigger.event.data.new_state.attributes.alert_threshold }})
+      data:
+        url: "{{ trigger.event.data.new_state.attributes.url }}"
+```
+
+- Each product keeps its own target: the threshold is read from that sensor's
+  `alert_threshold` attribute, set when adding the product and editable later
+  from **Settings → Devices & Services → Amazon Price Tracker → Configure**.
+- Products with no threshold set are skipped.
+- The last clause of the condition is what prevents re-notifying on every refresh:
+  it fires only on the crossing, when the previous price was above the threshold
+  (or the sensor was `unknown` / `unavailable`).
+- `mode: queued` matters — requests are spaced 8–15s apart per marketplace, so if
+  several products drop in the same cycle the notifications are delivered one
+  after another instead of the later ones being discarded.
+
+If you would rather not listen to every `state_changed` event, the alternative is a
+`time_pattern` trigger every 15 minutes with a `repeat` / `for_each` over
+`integration_entities('amazon_price_tracker')` — lighter on the event bus, but
+de-duplication is then up to you.
 
 ---
 
