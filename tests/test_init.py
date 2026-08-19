@@ -1,4 +1,5 @@
 """Tests for entry setup behaviour when Amazon blocks us."""
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -59,8 +60,8 @@ async def test_block_during_setup_still_loads_the_entry(hass, entry):
     assert hass.states.get("sensor.test_product").state == "unavailable"
 
 
-async def test_network_failure_during_setup_still_retries(hass, entry):
-    """A genuine connectivity problem must keep raising ConfigEntryNotReady."""
+async def test_network_failure_leaves_the_sensor_unavailable(hass, entry):
+    """Setup no longer fails on a fetch error — the coordinator owns the retry."""
     with patch(
         "custom_components.amazon_price_tracker.session.AmazonSession.async_get",
         AsyncMock(side_effect=httpx.ConnectError("no route to host")),
@@ -68,7 +69,31 @@ async def test_network_failure_during_setup_still_retries(hass, entry):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("sensor.test_product").state == "unavailable"
+
+
+async def test_setup_does_not_wait_for_the_first_fetch(hass, entry):
+    """Setup must not block on the session queue (N products * ~12s spacing)."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_get(*args, **kwargs):
+        started.set()
+        await release.wait()
+        return _response(BLOCKED_PAGE)
+
+    with patch(
+        "custom_components.amazon_price_tracker.session.AmazonSession.async_get",
+        _slow_get,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        # Setup returned while the fetch is still in flight
+        await asyncio.wait_for(started.wait(), timeout=5)
+        assert entry.state is ConfigEntryState.LOADED
+
+        release.set()
+        await hass.async_block_till_done()
 
 
 async def test_a_wall_puts_the_whole_marketplace_in_cooldown(hass, entry):

@@ -256,12 +256,15 @@ parser. What helps:
 If you want to know where you stand, open the product URL in a private window on
 the same network. If you get the interstitial there too, the block is at IP level.
 
-### `Amazon is blocking amazon.xx while setting up <ASIN>`
+### A newly added product stays `unavailable` for a while
 
-The block landed while a product was being added. The entry is created anyway and
-the sensor stays unavailable until the pause expires — deliberately, because
-failing setup would hand control to Home Assistant's setup-retry ladder, which
-retries far more aggressively than the integration's own backoff.
+Expected. The first fetch runs in the background rather than blocking setup, and
+requests to one marketplace are spaced 8–15s apart, so with several products the
+last one can take a couple of minutes to populate. If Amazon is blocking that
+marketplace, the sensor stays unavailable until the pause expires and then
+recovers on its own — setup is deliberately never failed for a block, because
+that would hand control to Home Assistant's setup-retry ladder, which retries far
+more aggressively than the integration's own backoff.
 
 ### `Could not parse price for ASIN … on what looks like a real product page`
 
