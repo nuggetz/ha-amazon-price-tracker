@@ -86,7 +86,22 @@ DOMAIN_CONFIG: dict[str, dict] = {
 
 DEFAULT_MARKETPLACE = "amazon.it"
 
-# Price selectors — ordered by reliability (Amazon DOM 2025-2026)
+# The product's own block. Amazon injects other products into the same page —
+# the "consider these alternative items" strip above the listing, sponsored
+# rows, related-item carousels — and every one of them carries .a-price nodes.
+# Any unanchored price lookup must stay inside one of these containers, or it
+# will happily return the first alternative item's price (issue #8).
+# Ordered narrow → wide: #ppd holds the title column and the buy box and
+# nothing else; #dp-container is the last resort before giving up.
+PRODUCT_ROOT_SELECTORS = [
+    "#ppd",
+    "#centerCol",
+    "#dp-container",
+]
+
+# Price selectors — ordered by reliability (Amazon DOM 2025-2026).
+# All of these are anchored to a buy-box element by id, so they are safe to run
+# against the whole document.
 PRICE_SELECTORS = [
     "#corePriceDisplay_desktop_feature_div span.a-offscreen",
     "#priceToPay span.a-offscreen",
@@ -94,7 +109,22 @@ PRICE_SELECTORS = [
     "#apex_desktop span.a-offscreen",
     "#buybox span.a-price span.a-offscreen",
     "#tp_price_block_total_price_ww span.a-offscreen",
-    ".a-price .a-offscreen",
+]
+
+# Unanchored last resort: matches any price node, so it is only ever run inside
+# a PRODUCT_ROOT_SELECTORS container.
+PRICE_FALLBACK_SELECTOR = ".a-price .a-offscreen"
+
+# Amazon sometimes serves a listing with no featured offer: the "price higher
+# than typical" notice, a listing whose sellers are all excluded, a variation
+# with no default choice. The buy box then carries no price at all, only a
+# "See all buying options" button. There is no price to parse in that state —
+# the sensor must say so rather than report a number from elsewhere.
+NO_FEATURED_OFFER_SELECTORS = [
+    "#unqualifiedBuyBox",
+    "#buybox-see-all-buying-choices",
+    "#buybox-see-all-buying-choices-announce",
+    "#buybox a[href*='/gp/offer-listing/']",
 ]
 
 TITLE_SELECTORS = [

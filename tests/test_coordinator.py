@@ -83,6 +83,64 @@ HTML_OUT_OF_STOCK = """
 </body></html>
 """
 
+# Issue #8: Amazon shows the "price higher than typical" notice, drops the price
+# from the buy box and puts a row of alternative items above the listing. The
+# first .a-price on the page then belongs to another product entirely.
+HTML_NO_FEATURED_OFFER = """
+<html><body>
+<div id="percolate-ui-ilm_div">
+  <h2>Prendi in considerazione questi articoli alternativi</h2>
+  <span class="a-price"><span class="a-offscreen">14,00€</span></span>
+  <span class="a-price"><span class="a-offscreen">26,83€</span></span>
+</div>
+<div id="dp-container">
+  <div id="ppd">
+    <div id="centerCol"><span id="productTitle">Brother LC3239XLY Giallo</span></div>
+    <div id="rightCol">
+      <div id="unqualifiedBuyBox">
+        <span>Prezzo pi\u00f9 alto di quello abituale</span>
+        <div id="buybox-see-all-buying-choices">
+          <a id="buybox-see-all-buying-choices-announce">Visualizza tutte le opzioni di acquisto</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>
+"""
+
+# Same alternative-items strip, but the listing does have its own price.
+HTML_ALTERNATIVES_ABOVE_REAL_PRICE = """
+<html><body>
+<div id="percolate-ui-ilm_div">
+  <span class="a-price"><span class="a-offscreen">14,00€</span></span>
+</div>
+<div id="ppd">
+  <span id="productTitle">Brother LC3239XLY Giallo</span>
+  <div id="corePriceDisplay_desktop_feature_div">
+    <span class="a-offscreen">68,00€</span>
+  </div>
+  <div id="availability"><span>Disponibile</span></div>
+</div>
+</body></html>
+"""
+
+# The buy box carries a price no anchored selector knows about: the unanchored
+# fallback must find it inside #ppd, not the carousel above.
+HTML_UNANCHORED_PRICE_IN_PPD = """
+<html><body>
+<div id="percolate-ui-ilm_div">
+  <span class="a-price"><span class="a-offscreen">14,00€</span></span>
+</div>
+<div id="ppd">
+  <span id="productTitle">Brother LC3239XLY Giallo</span>
+  <div id="someNewBuyBoxName">
+    <span class="a-price"><span class="a-offscreen">68,00€</span></span>
+  </div>
+</div>
+</body></html>
+"""
+
 HTML_WISHLIST = """
 <html><body><ul>
 <li class="g-item-sortable"
@@ -202,6 +260,40 @@ def test_parse_product_page_out_of_stock():
     assert price == 599.99
     assert "Non disponibile" in (avail_text or "")
 
+
+
+def test_parse_product_page_no_featured_offer():
+    """No price in the buy box must yield no price — not the alternative item's."""
+    price, title, is_available, avail_text = parse_product_page(
+        HTML_NO_FEATURED_OFFER, "B07HFFR4PH", european_format=True
+    )
+    assert price is None
+    assert title == "Brother LC3239XLY Giallo"
+    assert is_available is False
+    assert avail_text == "No featured offer"
+
+
+def test_parse_product_page_no_featured_offer_does_not_warn(caplog):
+    """It is not a layout change, so it must not push users to open an issue."""
+    parse_product_page(HTML_NO_FEATURED_OFFER, "B07HFFR4PH", european_format=True)
+    assert "Could not parse price" not in caplog.text
+
+
+def test_parse_product_page_ignores_alternative_items_price():
+    """An alternative item listed above the product must never win."""
+    price, title, is_available, _ = parse_product_page(
+        HTML_ALTERNATIVES_ABOVE_REAL_PRICE, "B07HFFR4PH", european_format=True
+    )
+    assert price == 68.0
+    assert is_available is True
+
+
+def test_parse_product_page_unanchored_fallback_stays_in_product_block():
+    """The unanchored fallback still works, scoped to the listing's own block."""
+    price, _, _, _ = parse_product_page(
+        HTML_UNANCHORED_PRICE_IN_PPD, "B07HFFR4PH", european_format=True
+    )
+    assert price == 68.0
 
 # ---------------------------------------------------------------------------
 # parse_wishlist_page

@@ -165,6 +165,13 @@ rather than the other products queueing up to collect a block each.
 - **Sensors occasionally go `unavailable` and come back on their own.** That's the
   pause doing its job. No action needed.
 - **Prices update roughly every four hours, never on a fixed clock.** Deliberate.
+- **A sensor sits at `unknown` while the product page is perfectly fine.** Amazon
+  is showing that listing without a price — the "price higher than typical"
+  notice, or no eligible seller — and offering only a *See all buying options*
+  button. There is no price on the page to read, so the sensor reports none and
+  `is_available` goes `false` until one comes back. It deliberately does not fall
+  back to a price from elsewhere on the page: those belong to the alternative
+  products Amazon suggests, not to yours.
 
 ### If it stays blocked
 

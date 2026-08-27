@@ -22,8 +22,11 @@ from .const import (
     DOMAIN_CONFIG,
     JITTER_SECONDS,
     MIN_PRODUCT_PAGE_BYTES,
+    NO_FEATURED_OFFER_SELECTORS,
     OUT_OF_STOCK_SELECTOR,
+    PRICE_FALLBACK_SELECTOR,
     PRICE_SELECTORS,
+    PRODUCT_ROOT_SELECTORS,
     TITLE_SELECTORS,
     WISHLIST_ID_RE,
 )
@@ -86,6 +89,20 @@ def parse_product_page(
     if avail_el:
         availability_text = avail_el.get_text(strip=True) or None
 
+    # The listing's own block. Everything unanchored is searched inside it, so
+    # that a page whose buy box has no price cannot yield the price of the
+    # alternative item Amazon suggests above it.
+    product_root = None
+    for selector in PRODUCT_ROOT_SELECTORS:
+        product_root = soup.select_one(selector)
+        if product_root is not None:
+            break
+
+    no_featured_offer = any(
+        soup.select_one(selector) is not None
+        for selector in NO_FEATURED_OFFER_SELECTORS
+    )
+
     price: float | None = None
     title: str | None = None
 
@@ -115,7 +132,7 @@ def parse_product_page(
         except (json.JSONDecodeError, AttributeError, StopIteration):
             continue
 
-    # --- Strategy 2: CSS selectors (scoped, narrow → wide) ---
+    # --- Strategy 2: CSS selectors anchored to the buy box (narrow → wide) ---
     if price is None:
         for selector in PRICE_SELECTORS:
             el = soup.select_one(selector)
@@ -125,10 +142,19 @@ def parse_product_page(
                     price = candidate
                     break
 
-    # --- Strategy 2b: composite whole + fraction fallback ---
+    # --- Strategy 2b: any price node, but only inside the product's block ---
+    if price is None and product_root is not None:
+        for el in product_root.select(PRICE_FALLBACK_SELECTOR):
+            candidate = parse_price(el.get_text(strip=True), european_format)
+            if candidate is not None:
+                price = candidate
+                break
+
+    # --- Strategy 2c: composite whole + fraction fallback, same scope ---
     if price is None:
-        whole_el = soup.select_one("span.a-price-whole")
-        frac_el = soup.select_one("span.a-price-fraction")
+        scope = product_root if product_root is not None else soup
+        whole_el = scope.select_one("span.a-price-whole")
+        frac_el = scope.select_one("span.a-price-fraction")
         if whole_el and frac_el:
             whole = whole_el.get_text(strip=True).rstrip(",. ")
             frac = frac_el.get_text(strip=True).strip()
@@ -160,7 +186,20 @@ def parse_product_page(
             f"({len(html)} bytes, no title, no price)"
         )
 
-    if price is None and is_available:
+    if price is None and no_featured_offer:
+        # Nothing is wrong with the page or the parser: Amazon has withdrawn the
+        # buy box for this listing, so there is no price to read. Mark it
+        # unavailable — the sensor goes unknown, which beats a stale or foreign
+        # number — and say why, instead of warning about a layout change.
+        is_available = False
+        availability_text = availability_text or "No featured offer"
+        _LOGGER.info(
+            "Amazon is not showing a price for ASIN %s: the listing has no "
+            "featured offer right now (\"See all buying options\"). The sensor "
+            "stays unknown until a price comes back.",
+            asin,
+        )
+    elif price is None and is_available:
         # Dumping the first 300 chars only ever showed Amazon's boilerplate
         # doctype. Report what actually helps triage instead, and keep the full
         # page behind debug logging.
