@@ -278,63 +278,60 @@ action:
 
 ### Every product, with a single automation
 
-Home Assistant's `state` and `numeric_state` triggers need a static list of entity
-IDs, so covering every tracked product means triggering on `state_changed` and
-filtering by integration in the condition. Products you add later are picked up
-automatically — no automation to edit.
+The integration fires an `amazon_price_tracker_price_drop` event whenever a
+product's price crosses its own threshold downwards. One trigger covers every
+product, including the ones you add later.
 
 ```yaml
 alias: "Amazon price drop — all products"
 mode: queued
-max: 25
+max: 10
 
 triggers:
   - trigger: event
-    event_type: state_changed
-
-conditions:
-  - condition: template
-    value_template: >
-      {% set new = trigger.event.data.new_state %}
-      {% set old = trigger.event.data.old_state %}
-      {% set threshold = new.attributes.get('alert_threshold') if new else none %}
-      {{ trigger.event.data.entity_id in integration_entities('amazon_price_tracker')
-         and new is not none
-         and threshold is not none
-         and new.state not in ['unknown', 'unavailable']
-         and new.state | float(0) <= threshold | float(0)
-         and (old is none
-              or old.state in ['unknown', 'unavailable']
-              or old.state | float(0) > threshold | float(0)) }}
+    event_type: amazon_price_tracker_price_drop
 
 actions:
   - action: notify.mobile_app_your_phone
     data:
       title: "Price drop"
       message: >
-        {{ trigger.event.data.new_state.attributes.title }} is now
-        {{ trigger.event.data.new_state.state }}
-        {{ trigger.event.data.new_state.attributes.unit_of_measurement }}
-        (threshold: {{ trigger.event.data.new_state.attributes.alert_threshold }})
+        {{ trigger.event.data.title }} is now
+        {{ trigger.event.data.price }} {{ trigger.event.data.currency }}
+        (threshold: {{ trigger.event.data.alert_threshold }})
       data:
-        url: "{{ trigger.event.data.new_state.attributes.url }}"
+        url: "{{ trigger.event.data.url }}"
 ```
 
-- Each product keeps its own target: the threshold is read from that sensor's
-  `alert_threshold` attribute, set when adding the product and editable later
-  from **Settings → Devices & Services → Amazon Price Tracker → Configure**.
-- Products with no threshold set are skipped.
-- The last clause of the condition is what prevents re-notifying on every refresh:
-  it fires only on the crossing, when the previous price was above the threshold
-  (or the sensor was `unknown` / `unavailable`).
-- `mode: queued` matters — requests are spaced 8–15s apart per marketplace, so if
-  several products drop in the same cycle the notifications are delivered one
-  after another instead of the later ones being discarded.
+Event data:
 
-If you would rather not listen to every `state_changed` event, the alternative is a
-`time_pattern` trigger every 15 minutes with a `repeat` / `for_each` over
-`integration_entities('amazon_price_tracker')` — lighter on the event bus, but
-de-duplication is then up to you.
+| Field | Description |
+|---|---|
+| `entity_id` | The sensor that dropped |
+| `asin` | Product ASIN |
+| `name` | Name you gave the product in Home Assistant |
+| `title` | Product title as read from Amazon |
+| `price` | The new price |
+| `currency` | Marketplace currency (`EUR`, `USD`, `GBP`…) |
+| `alert_threshold` | The threshold that was crossed |
+| `min_price` | Lowest price ever recorded for this product |
+| `url` | Product URL |
+| `marketplace` | e.g. `amazon.it` |
+
+- Each product keeps its own target: the threshold is set when adding the product
+  and editable later from **Settings → Devices & Services → Amazon Price Tracker
+  → Configure**. Products with no threshold set never fire.
+- The event is the *crossing*, not the condition: it fires once when the price
+  goes under the threshold, not on every refresh while it stays there. It re-arms
+  when the price goes back above, or when the product stops having a price at all.
+- Thresholds are always in the marketplace's own currency. Nothing is converted.
+
+> **If you are on 0.4.1 or earlier**, this README documented an automation that
+> triggered on `state_changed` and filtered by integration in the condition.
+> That trigger fires for every state change in the whole instance and queues a
+> run for each one, so the run that actually mattered was dropped once the queue
+> filled — see [#9](https://github.com/nuggetz/ha-amazon-price-tracker/issues/9).
+> Replace it with the automation above.
 
 ---
 
@@ -346,6 +343,7 @@ de-duplication is then up to you.
 - Requests to the same marketplace are serialised and spaced 8–15s apart, so products never arrive as a synchronised burst
 - A block pauses every product on that marketplace for ~30 min (circuit breaker) instead of each one collecting its own
 - Direct HTML scraping: JSON-LD structured data first, CSS selectors as fallback, composite whole+fraction as last resort
+- Fires `amazon_price_tracker_price_drop` on a threshold crossing, so one automation can cover every product without listening to the whole event bus
 - `min_price` uses `RestoreSensor` — survives HA restarts without an external DB
 - HTTP client: `httpx` async (not `aiohttp`, to avoid version conflicts with HA internals)
 - HTML parsing runs in an executor thread (non-blocking)

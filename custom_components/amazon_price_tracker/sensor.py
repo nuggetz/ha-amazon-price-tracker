@@ -14,7 +14,13 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import COORDINATORS, DEFAULT_MARKETPLACE, DOMAIN, DOMAIN_CONFIG
+from .const import (
+    COORDINATORS,
+    DEFAULT_MARKETPLACE,
+    DOMAIN,
+    DOMAIN_CONFIG,
+    EVENT_PRICE_DROP,
+)
 from .coordinator import AmazonPriceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +64,11 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
         )
         self._min_price: float | None = None
         self._min_price_date: str | None = None
+        # None = unknown side of the threshold (never seen, or the price is
+        # currently unavailable). The alert event fires on the transition into
+        # True, so None behaves like "was above": coming back from unknown with
+        # a price under the threshold is a crossing.
+        self._below_threshold: bool | None = None
         self._attr_unique_id = f"amazon_price_{self._asin}"
 
     async def async_added_to_hass(self) -> None:
@@ -72,13 +83,26 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                 except (ValueError, TypeError):
                     pass
 
+            # Restore which side of the threshold we were on, so a restart with
+            # a price already below it does not re-announce an old drop.
+            if self._alert_threshold is not None:
+                try:
+                    self._below_threshold = (
+                        float(last_state.state) <= self._alert_threshold
+                    )
+                except (ValueError, TypeError):
+                    self._below_threshold = None
+
         # Seed min_price from coordinator data already fetched during first_refresh —
         # _handle_coordinator_update won't fire for data that arrived before subscription.
-        if self._min_price is None and self.coordinator.data is not None:
+        if self.coordinator.data is not None:
             price = self.coordinator.data.get("price")
-            if price is not None:
+            if price is not None and self._min_price is None:
                 self._min_price = price
                 self._min_price_date = datetime.utcnow().isoformat()
+            # Same reason: a drop that happened while Home Assistant was down
+            # lands in that first fetch, and nothing would announce it.
+            self._check_alert_threshold(price)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -89,7 +113,44 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                 if self._min_price is None or price < self._min_price:
                     self._min_price = price
                     self._min_price_date = datetime.utcnow().isoformat()
+            self._check_alert_threshold(price)
         super()._handle_coordinator_update()
+
+    @callback
+    def _check_alert_threshold(self, price: float | None) -> None:
+        """Fire the price drop event on the crossing, not on every refresh."""
+        if self._alert_threshold is None:
+            return
+
+        if price is None:
+            # No price this cycle: forget which side we were on, so the next
+            # price under the threshold counts as a fresh crossing.
+            self._below_threshold = None
+            return
+
+        below = price <= self._alert_threshold
+        was_below = self._below_threshold
+        self._below_threshold = below
+
+        if not below or was_below:
+            return
+
+        data = self.coordinator.data or {}
+        self.hass.bus.async_fire(
+            EVENT_PRICE_DROP,
+            {
+                "entity_id": self.entity_id,
+                "asin": self._asin,
+                "name": self._entry.options.get("name", self._entry.data["name"]),
+                "title": data.get("title"),
+                "price": price,
+                "currency": self._attr_native_unit_of_measurement,
+                "alert_threshold": self._alert_threshold,
+                "min_price": self._min_price,
+                "url": data.get("url"),
+                "marketplace": self._entry.data.get("marketplace", DEFAULT_MARKETPLACE),
+            },
+        )
 
     @property
     def native_value(self) -> float | None:

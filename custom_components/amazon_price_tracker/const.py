@@ -4,6 +4,15 @@ DOMAIN = "amazon_price_tracker"
 COORDINATORS = "coordinators"
 SESSIONS = "sessions"
 
+# Fired when a product's price crosses its alert threshold downwards.
+#
+# Issue #9: covering every product used to mean triggering an automation on
+# `state_changed` and filtering by integration in the condition — which queues a
+# run for every state change in the whole instance and drops the real one once
+# the queue fills. The integration knows the threshold and knows the crossing,
+# so it emits the event itself and the automation triggers on one event type.
+EVENT_PRICE_DROP = f"{DOMAIN}_price_drop"
+
 # URL template — marketplace and asin are injected at runtime
 BASE_URL = "https://www.{marketplace}/dp/{asin}"
 REQUEST_TIMEOUT = 30

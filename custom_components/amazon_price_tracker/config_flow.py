@@ -252,6 +252,15 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
                 data={"name": name, "alert_threshold": alert_threshold},
             )
 
+        # The threshold is compared against the sensor's own value, which is in
+        # the marketplace's currency — never converted. Issue #9: the label used
+        # to say "in EUR" on every marketplace, so a .com user reasonably read a
+        # correct USD comparison as a broken one.
+        marketplace = self._config_entry.data.get("marketplace", DEFAULT_MARKETPLACE)
+        currency = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])[
+            "currency"
+        ]
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -263,4 +272,8 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
                     ): vol.Coerce(float),
                 }
             ),
+            description_placeholders={
+                "marketplace": marketplace,
+                "currency": currency,
+            },
         )

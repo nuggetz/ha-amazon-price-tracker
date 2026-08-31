@@ -57,11 +57,11 @@
         "description": "Update the name or price threshold. The ASIN cannot be changed.",
         "data": {
           "name": "Custom name",
-          "alert_threshold": "Price alert threshold in EUR (optional)"
+          "alert_threshold": "Price alert threshold (optional)"
         },
         "data_description": {
           "name": "Name shown in Home Assistant",
-          "alert_threshold": "Leave empty to remove the threshold"
+          "alert_threshold": "Leave empty to remove the threshold. Prices on {marketplace} are in {currency}."
         }
       }
     }
