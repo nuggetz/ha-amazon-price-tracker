@@ -258,24 +258,6 @@ hours_to_show: 720
 
 ## Price alert automations
 
-### One product
-
-```yaml
-alias: "RAM price drop alert"
-trigger:
-  - platform: numeric_state
-    entity_id: sensor.kingston_32gb_ddr5
-    below: "{{ state_attr('sensor.kingston_32gb_ddr5', 'alert_threshold') }}"
-action:
-  - service: notify.mobile_app
-    data:
-      title: "Price drop!"
-      message: >
-        {{ state_attr('sensor.kingston_32gb_ddr5', 'title') }}
-        dropped to {{ states('sensor.kingston_32gb_ddr5') }}
-        (threshold: {{ state_attr('sensor.kingston_32gb_ddr5', 'alert_threshold') }})
-```
-
 ### Every product, with a single automation
 
 The integration fires an `amazon_price_tracker_price_drop` event whenever a
@@ -301,6 +283,29 @@ actions:
         (threshold: {{ trigger.event.data.alert_threshold }})
       data:
         url: "{{ trigger.event.data.url }}"
+```
+
+### One product
+
+The same event, filtered down to one sensor in the trigger itself:
+
+```yaml
+alias: "RAM price drop alert"
+
+triggers:
+  - trigger: event
+    event_type: amazon_price_tracker_price_drop
+    event_data:
+      entity_id: sensor.kingston_32gb_ddr5
+
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: "Price drop!"
+      message: >
+        {{ trigger.event.data.title }} dropped to
+        {{ trigger.event.data.price }} {{ trigger.event.data.currency }}
+        (threshold: {{ trigger.event.data.alert_threshold }})
 ```
 
 Event data:
