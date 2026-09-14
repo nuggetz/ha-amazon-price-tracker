@@ -94,6 +94,14 @@ class PriceHistory:
         """Days carrying data inside the window — what arming is measured on."""
         return len(self._window_values(asin, now))
 
+    async def async_flush(self) -> None:
+        """Write now instead of waiting out the delay.
+
+        Used when there may be nothing left to trigger the delayed write — the
+        last product of an integration being removed, for one.
+        """
+        await self._store.async_save(self._data)
+
     @callback
     def async_remove(self, asin: str) -> None:
         """Forget a product's history when its entry is removed.

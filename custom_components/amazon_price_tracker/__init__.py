@@ -230,8 +230,15 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     Without this the window outlives every product ever tracked, and the user
     loses the one reset they have: remove and re-add.
     """
-    if (history := hass.data.get(DOMAIN, {}).get(HISTORY)) is not None:
-        history.async_remove(entry.data["asin"])
+    history = hass.data.get(DOMAIN, {}).get(HISTORY)
+    if history is None:
+        # The entry may never have been set up — an ASIN added while Amazon was
+        # walling, say — so there is nothing in memory to remove it from.
+        history = PriceHistory(hass)
+        await history.async_load()
+
+    history.async_remove(entry.data["asin"])
+    await history.async_flush()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -242,10 +249,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = coordinators.pop(entry.entry_id)
         await coordinator.async_shutdown()
 
-        # Remove services and drop the shared sessions when the last entry goes
+        # Remove services and drop the shared sessions when the last entry goes.
+        # The history stays: it holds no resources, and Home Assistant unloads an
+        # entry *before* calling async_remove_entry — dropping it here would
+        # leave the last product's history behind on the way out, which is the
+        # one case where the user is explicitly asking for it to go.
         if not coordinators:
             await async_close_sessions(hass)
-            hass.data[DOMAIN].pop(HISTORY, None)
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
             hass.services.async_remove(DOMAIN, SERVICE_IMPORT_WISHLIST)
 
