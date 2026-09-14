@@ -17,10 +17,12 @@ from .const import (
     DEFAULT_MARKETPLACE,
     DOMAIN,
     DOMAIN_CONFIG,
+    HISTORY,
     WISHLIST_ID_RE,
 )
 from .coordinator import AmazonPriceCoordinator, parse_wishlist_page
 from .exceptions import AmazonBlockedError
+from .history import PriceHistory
 from .session import async_close_sessions, async_get_session
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,7 +44,16 @@ _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinators = hass.data.setdefault(DOMAIN, {}).setdefault(COORDINATORS, {})
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    coordinators = domain_data.setdefault(COORDINATORS, {})
+
+    # Price history is collected for every product, whatever kind of threshold
+    # it uses. Tying collection to the percentage mode would mean that switching
+    # a product to it starts a two-week warm-up even on an installation that has
+    # been running for a year — the feature would look broken on first use.
+    if (history := domain_data.get(HISTORY)) is None:
+        history = domain_data[HISTORY] = PriceHistory(hass)
+    await history.async_load()
 
     # Options override the original data for mutable fields (name, alert_threshold)
     name = entry.options.get("name", entry.data["name"])
@@ -54,6 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         asin=entry.data["asin"],
         name=name,
         marketplace=marketplace,
+        history=history,
     )
 
     coordinators[entry.entry_id] = coordinator
@@ -212,6 +224,16 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the product's price history when the product itself is removed.
+
+    Without this the window outlives every product ever tracked, and the user
+    loses the one reset they have: remove and re-add.
+    """
+    if (history := hass.data.get(DOMAIN, {}).get(HISTORY)) is not None:
+        history.async_remove(entry.data["asin"])
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
@@ -223,6 +245,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Remove services and drop the shared sessions when the last entry goes
         if not coordinators:
             await async_close_sessions(hass)
+            hass.data[DOMAIN].pop(HISTORY, None)
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
             hass.services.async_remove(DOMAIN, SERVICE_IMPORT_WISHLIST)
 

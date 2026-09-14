@@ -31,6 +31,7 @@ from .const import (
     WISHLIST_ID_RE,
 )
 from .exceptions import AmazonBlockedError, AmazonCaptchaError
+from .history import PriceHistory
 from .session import AmazonSession, async_get_session
 
 _LOGGER = logging.getLogger(__name__)
@@ -271,6 +272,7 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         asin: str,
         name: str,
         marketplace: str = DEFAULT_MARKETPLACE,
+        history: PriceHistory | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -282,6 +284,7 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         self.product_name = name
         self.marketplace = marketplace
         self._market_config = DOMAIN_CONFIG.get(marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
+        self.history = history
         # True when the last failure was Amazon blocking us rather than a
         # network or configuration problem. Setup reads this to decide whether
         # the entry is genuinely not ready or merely walled for now.
@@ -336,6 +339,13 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(str(err)) from err
 
         self.blocked_by_amazon = False
+
+        # Recorded here rather than in the sensor: this is the one place that
+        # knows the fetch succeeded, and it runs exactly once per refresh. A
+        # fetch that came back without a price contributes nothing — a missing
+        # price is not a cheap one.
+        if self.history is not None and price is not None:
+            self.history.async_add_sample(self.asin, price)
 
         jitter = random.uniform(-JITTER_SECONDS, JITTER_SECONDS)
         self.update_interval = timedelta(seconds=BASE_INTERVAL_SECONDS + jitter)

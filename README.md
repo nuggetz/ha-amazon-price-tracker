@@ -22,6 +22,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 - **Auto-detected default marketplace**: the marketplace dropdown pre-selects the one matching your Home Assistant country setting — no manual change needed for non-Italian installs
 - Scrapes product pages without an Amazon account (JSON-LD first, CSS selectors as fallback)
 - One sensor per product, added via UI Config Flow — edit name and alert threshold at any time via Options Flow
+- Alerts on a **fixed price or a percentage below the product's usual price** (30-day median), fired as an event the moment the price crosses
 - Tracks historical minimum price, persisted across HA restarts
 - Real-time stock status: `is_available` bool + `availability_text` from Amazon (e.g. "Only 2 left in stock")
 - `amazon_price_tracker.force_refresh` service for on-demand price updates
@@ -95,7 +96,8 @@ When adding the integration you can choose between two modes:
 | ASIN | Yes | 10-character Amazon product code (e.g. `B09FKN79QR`) |
 | Custom name | Yes | Label shown in Home Assistant (e.g. `Kingston 32GB DDR5`) |
 | Amazon marketplace | Yes | Which Amazon site to track — pre-selected automatically from your HA country setting |
-| Price alert threshold | No | Used in automations to trigger below a target price |
+| Price alert threshold | No | Fixed amount, in the marketplace's currency |
+| Alert at a % below the usual price | No | Alternative to the fixed amount — see [Percentage thresholds](#percentage-thresholds) |
 
 > **Finding the ASIN:** open the product page on Amazon. The ASIN is in the URL after `/dp/` (e.g. `amazon.de/dp/B09FKN79QR`) or in the product details section near the bottom of the page. For products with variants (colour, size, storage…), select the exact variant first, then copy the URL.
 
@@ -105,6 +107,7 @@ When adding the integration you can choose between two modes:
 | ----- | -------- | ----------- |
 | Wishlist URL | Yes | Full URL of a **public** Amazon wishlist |
 | Price alert threshold | No | Applied to all imported products (editable per-product later) |
+| Alert at a % below the usual price | No | Same, as a percentage instead of an amount |
 
 The wishlist must be set to **Public** on Amazon (Account → Lists → Manage list → Privacy: Public). Only the first page (~40 products) is scraped.
 
@@ -127,7 +130,12 @@ Each product creates one sensor entity under a dedicated device.
 | `min_price_date` | `str ISO` | Date the minimum was recorded |
 | `is_available` | `bool` | `false` when the product is out of stock |
 | `availability_text` | `str` | Raw stock message from Amazon (e.g. "Only 2 left in stock") |
-| `alert_threshold` | `float` or `null` | Threshold configured by the user |
+| `alert_threshold` | `float` or `null` | The amount being compared against — resolved from the percentage when one is set |
+| `threshold_mode` | `str` | `percent`, on products using a percentage threshold |
+| `discount_pct` | `float` | The configured percentage |
+| `reference_price` | `float` or `null` | The product's usual price (30-day median) |
+| `reference_status` | `str` | `ready`, or `collecting` while the window fills |
+| `reference_days` / `reference_days_required` | `int` | Days of history collected, and how many are needed |
 | `last_updated` | `str ISO` | Timestamp of the last successful fetch |
 
 ![Sensor attributes](docs/screenshots/entity-states.png)
@@ -318,7 +326,10 @@ Event data:
 | `title` | Product title as read from Amazon |
 | `price` | The new price |
 | `currency` | Marketplace currency (`EUR`, `USD`, `GBP`…) |
-| `alert_threshold` | The threshold that was crossed |
+| `alert_threshold` | The amount that was crossed, whatever kind of threshold produced it |
+| `threshold_mode` | `absolute` or `percent` |
+| `reference_price` | Usual price the percentage was measured from (`null` on a fixed threshold) |
+| `discount_pct` | The configured percentage (`null` on a fixed threshold) |
 | `min_price` | Lowest price ever recorded for this product |
 | `url` | Product URL |
 | `marketplace` | e.g. `amazon.it` |
@@ -330,6 +341,32 @@ Event data:
   goes under the threshold, not on every refresh while it stays there. It re-arms
   when the price goes back above, or when the product stops having a price at all.
 - Thresholds are always in the marketplace's own currency. Nothing is converted.
+
+### Percentage thresholds
+
+Instead of a fixed amount, a product can alert at a percentage below its **usual
+price** — `15` means "tell me when it costs 15% less than it normally does".
+
+The usual price is the **median of the last 30 days**, one value per day. A
+median rather than an average because a single misread price cannot move it, and
+because a long promotion does not drag it down and quietly make the threshold
+stricter exactly when prices are low.
+
+Because it is measured from real history, it needs history: a percentage
+threshold stays silent until **14 days** carry a price, and says so while it
+waits. The sensor's `reference_status` reads `collecting`, `reference_days`
+counts up, and the Configure dialog shows the same thing. Only days with a price
+count — while Amazon is blocking, the clock does not move, because what is
+missing is data and not time.
+
+History is collected for every product from the moment you add it, whatever kind
+of threshold it uses, so switching an existing product to a percentage arms it
+immediately. Removing and re-adding a product clears its history — that is the
+way to reset it.
+
+Set either a fixed threshold or a percentage, not both. Whichever you set,
+`alert_threshold` on the sensor and in the event is the resulting amount of
+money, so automations written for a fixed threshold keep working unchanged.
 
 > **If you are on 0.4.1 or earlier**, this README documented an automation that
 > triggered on `state_changed` and filtered by integration in the condition.
@@ -405,6 +442,7 @@ logger:
 - [x] Wishlist import — from Config Flow UI and from Developer Tools service
 - [x] Accepted into the default HACS store 🎉
 - [x] Shared session per marketplace, request spacing and circuit breaker
+- [x] Percentage thresholds, measured against the product's usual price
 - [ ] Proxy support for blocked IPs
 - [ ] Product image as `entity_picture` attribute
 

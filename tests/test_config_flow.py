@@ -304,3 +304,114 @@ async def test_options_flow_updates_name_and_threshold(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["name"] == "Updated Name"
     assert result["data"]["alert_threshold"] == 199.99
+
+
+# ---------------------------------------------------------------------------
+# Thresholds: a fixed amount or a percentage, never both (issue #10)
+# ---------------------------------------------------------------------------
+
+async def test_add_product_rejects_two_thresholds(
+    hass: HomeAssistant, mock_setup_entry, mock_reachable
+):
+    """Which field is filled in *is* the mode, so both filled has no meaning."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "add_product"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "asin": "B09FKN79QR",
+            "name": "Test Product",
+            "marketplace": "amazon.it",
+            "alert_threshold": 199.99,
+            "alert_discount_pct": 15,
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "both_thresholds"}
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+async def test_add_product_stores_a_percentage(
+    hass: HomeAssistant, mock_setup_entry, mock_reachable
+):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "add_product"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "asin": "B09FKN79QR",
+            "name": "Test Product",
+            "marketplace": "amazon.it",
+            "alert_discount_pct": 15,
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["alert_discount_pct"] == 15
+    assert result["data"]["alert_threshold"] is None
+
+
+async def test_options_flow_swaps_a_fixed_threshold_for_a_percentage(
+    hass: HomeAssistant, mock_setup_entry, mock_reachable
+):
+    """Clearing the old threshold must actually clear it, not fall back to data."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "add_product"}
+    )
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "asin": "B09FKN79QR",
+            "name": "Test Product",
+            "marketplace": "amazon.it",
+            "alert_threshold": 199.99,
+        },
+    )
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"name": "Test Product", "alert_discount_pct": 20},
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["alert_discount_pct"] == 20
+    assert result["data"]["alert_threshold"] is None
+
+
+async def test_options_flow_rejects_two_thresholds(
+    hass: HomeAssistant, mock_setup_entry, mock_reachable
+):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "add_product"}
+    )
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"asin": "B09FKN79QR", "name": "Test Product", "marketplace": "amazon.it"},
+    )
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"name": "Test Product", "alert_threshold": 10.0, "alert_discount_pct": 20},
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "both_thresholds"}
