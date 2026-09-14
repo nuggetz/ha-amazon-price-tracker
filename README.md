@@ -360,9 +360,11 @@ count — while Amazon is blocking, the clock does not move, because what is
 missing is data and not time.
 
 History is collected for every product from the moment you add it, whatever kind
-of threshold it uses, so switching an existing product to a percentage arms it
-immediately. Removing and re-adding a product clears its history — that is the
-way to reset it.
+of threshold it uses. There is no back-fill: collection starts when you upgrade
+to 0.5.0, so the first percentage alerts are possible about two weeks later.
+From then on, switching an existing product to a percentage arms it immediately.
+Removing and re-adding a product clears its history — that is the way to reset
+it.
 
 Set either a fixed threshold or a percentage, not both. Whichever you set,
 `alert_threshold` on the sensor and in the event is the resulting amount of
