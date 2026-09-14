@@ -14,13 +14,15 @@
           "asin": "ASIN",
           "name": "Nome personalizzato",
           "marketplace": "Marketplace Amazon",
-          "alert_threshold": "Soglia prezzo alert (opzionale)"
+          "alert_threshold": "Soglia prezzo alert (opzionale)",
+          "alert_discount_pct": "Alert a una % sotto il prezzo abituale (opzionale)"
         },
         "data_description": {
           "asin": "Codice ASIN di 10 caratteri (es. B09FKN79QR). Si trova nell'URL del prodotto dopo /dp/.",
           "name": "Nome che verrà mostrato in Home Assistant",
           "marketplace": "Sito Amazon su cui monitorare il prezzo (es. amazon.it, amazon.de)",
-          "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni"
+          "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni",
+          "alert_discount_pct": "Alternativa alla soglia fissa qui sopra — imposta l'una o l'altra, non entrambe. 15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale del prodotto\", calcolato come mediana degli ultimi 30 giorni."
         }
       },
       "import_wishlist": {
@@ -28,11 +30,13 @@
         "description": "Inserisci l'URL della lista desideri pubblica. Verranno creati sensori per tutti i prodotti trovati.",
         "data": {
           "url": "URL lista desideri",
-          "alert_threshold": "Soglia prezzo alert per tutti i prodotti (opzionale)"
+          "alert_threshold": "Soglia prezzo alert per tutti i prodotti (opzionale)",
+          "alert_discount_pct": "Alert a una % sotto il prezzo abituale (opzionale)"
         },
         "data_description": {
           "url": "URL completo della lista desideri pubblica. La lista deve essere impostata come Pubblica su Amazon.",
-          "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito."
+          "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito.",
+          "alert_discount_pct": "Alternativa alla soglia fissa qui sopra — imposta l'una o l'altra, non entrambe. Viene applicata a ogni prodotto importato e resta modificabile prodotto per prodotto."
         }
       }
     },
@@ -43,7 +47,8 @@
       "invalid_wishlist_url": "URL della lista desideri non valido. Assicurati di copiare l'URL completo della lista pubblica Amazon.",
       "wishlist_not_found": "Lista desideri non trovata o impostata come Privata su Amazon.",
       "wishlist_empty": "Nessun prodotto trovato nella lista. La lista potrebbe essere vuota o privata.",
-      "amazon_blocked": "Amazon sta bloccando le richieste dal tuo indirizzo IP. Attendi un po' e riprova."
+      "amazon_blocked": "Amazon sta bloccando le richieste dal tuo indirizzo IP. Attendi un po' e riprova.",
+      "both_thresholds": "Imposta o una soglia fissa o una percentuale, non entrambe: sono due modi di dire la stessa cosa."
     },
     "abort": {
       "already_configured": "Questo ASIN è già configurato.",
@@ -54,16 +59,21 @@
     "step": {
       "init": {
         "title": "Modifica prodotto",
-        "description": "Aggiorna il nome o la soglia di prezzo. L'ASIN non è modificabile.",
+        "description": "Aggiorna il nome o la soglia di prezzo. L'ASIN non è modificabile. {reference}",
         "data": {
           "name": "Nome personalizzato",
-          "alert_threshold": "Soglia prezzo alert (opzionale)"
+          "alert_threshold": "Soglia prezzo alert (opzionale)",
+          "alert_discount_pct": "Alert a una % sotto il prezzo abituale (opzionale)"
         },
         "data_description": {
           "name": "Nome che verrà mostrato in Home Assistant",
-          "alert_threshold": "Lascia vuoto per rimuovere la soglia. I prezzi su {marketplace} sono in {currency}."
+          "alert_threshold": "Lascia vuoto per rimuovere la soglia. I prezzi su {marketplace} sono in {currency}.",
+          "alert_discount_pct": "Alternativa alla soglia fissa — imposta l'una o l'altra, non entrambe. 15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale\". Lascia vuoto per rimuoverla."
         }
       }
+    },
+    "error": {
+      "both_thresholds": "Imposta o una soglia fissa o una percentuale, non entrambe: sono due modi di dire la stessa cosa."
     }
   }
 }

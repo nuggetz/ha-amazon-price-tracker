@@ -20,6 +20,11 @@ from .const import (
     DOMAIN,
     DOMAIN_CONFIG,
     EVENT_PRICE_DROP,
+    HISTORY_MIN_DAYS,
+    MODE_ABSOLUTE,
+    MODE_PERCENT,
+    STATUS_COLLECTING,
+    STATUS_READY,
 )
 from .coordinator import AmazonPriceCoordinator
 
@@ -62,6 +67,12 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
         self._alert_threshold: float | None = entry.options.get(
             "alert_threshold", entry.data.get("alert_threshold")
         )
+        # A percentage below the product's usual price, as an alternative to the
+        # absolute threshold above. The config flow refuses to set both.
+        self._discount_pct: float | None = entry.options.get(
+            "alert_discount_pct", entry.data.get("alert_discount_pct")
+        )
+        self._history = coordinator.history
         self._min_price: float | None = None
         self._min_price_date: str | None = None
         # None = unknown side of the threshold (never seen, or the price is
@@ -85,11 +96,9 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
 
             # Restore which side of the threshold we were on, so a restart with
             # a price already below it does not re-announce an old drop.
-            if self._alert_threshold is not None:
+            if (threshold := self._resolve_threshold()) is not None:
                 try:
-                    self._below_threshold = (
-                        float(last_state.state) <= self._alert_threshold
-                    )
+                    self._below_threshold = float(last_state.state) <= threshold
                 except (ValueError, TypeError):
                     self._below_threshold = None
 
@@ -116,10 +125,48 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             self._check_alert_threshold(price)
         super()._handle_coordinator_update()
 
+    def _resolve_threshold(self) -> float | None:
+        """The threshold as an amount of money, whatever the user configured.
+
+        A percentage is resolved against the reference price and handed to the
+        same crossing check as a fixed amount — the alert has one mechanism, not
+        one per kind of threshold. None means "do not evaluate": no threshold
+        set, or a percentage one whose reference is not ready yet.
+        """
+        if self._discount_pct is None:
+            return self._alert_threshold
+
+        if (reference := self._reference_price) is None:
+            return None
+
+        return round(reference * (1 - self._discount_pct / 100), 2)
+
+    @property
+    def _threshold_mode(self) -> str | None:
+        if self._discount_pct is not None:
+            return MODE_PERCENT
+        if self._alert_threshold is not None:
+            return MODE_ABSOLUTE
+        return None
+
+    @property
+    def _reference_price(self) -> float | None:
+        """The product's usual price, or None while the window is filling."""
+        if self._history is None:
+            return None
+        return self._history.reference_price(self._asin)
+
     @callback
     def _check_alert_threshold(self, price: float | None) -> None:
         """Fire the price drop event on the crossing, not on every refresh."""
-        if self._alert_threshold is None:
+        threshold = self._resolve_threshold()
+
+        if threshold is None:
+            # No threshold, or a percentage one still collecting. Forget which
+            # side we were on, so the first evaluation once it arms counts as a
+            # crossing — the same reason the first fetch after a restart is
+            # evaluated rather than assumed.
+            self._below_threshold = None
             return
 
         if price is None:
@@ -128,7 +175,7 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             self._below_threshold = None
             return
 
-        below = price <= self._alert_threshold
+        below = price <= threshold
         was_below = self._below_threshold
         self._below_threshold = below
 
@@ -145,7 +192,10 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                 "title": data.get("title"),
                 "price": price,
                 "currency": self._attr_native_unit_of_measurement,
-                "alert_threshold": self._alert_threshold,
+                "alert_threshold": threshold,
+                "threshold_mode": self._threshold_mode,
+                "reference_price": self._reference_price,
+                "discount_pct": self._discount_pct,
                 "min_price": self._min_price,
                 "url": data.get("url"),
                 "marketplace": self._entry.data.get("marketplace", DEFAULT_MARKETPLACE),
@@ -162,7 +212,7 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
         last_updated = data.get("last_updated")
-        return {
+        attributes = {
             "asin": self._asin,
             "marketplace": self._entry.data.get("marketplace", DEFAULT_MARKETPLACE),
             "title": data.get("title"),
@@ -171,13 +221,39 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             "min_price_date": self._min_price_date,
             "is_available": data.get("is_available"),
             "availability_text": data.get("availability_text"),
-            "alert_threshold": self._alert_threshold,
+            # Always the amount of money being compared against, so automations
+            # written for a fixed threshold keep working on a percentage one.
+            "alert_threshold": self._resolve_threshold(),
             "last_updated": (
                 last_updated.isoformat()
                 if isinstance(last_updated, datetime)
                 else None
             ),
         }
+
+        # Only meaningful on a percentage threshold. On a fixed one these would
+        # be five permanently empty attributes written to the Recorder on every
+        # state change.
+        if self._discount_pct is not None:
+            reference = self._reference_price
+            attributes.update(
+                {
+                    "threshold_mode": MODE_PERCENT,
+                    "discount_pct": self._discount_pct,
+                    "reference_price": reference,
+                    # Says out loud why an alert is not armed yet, so a quiet
+                    # first fortnight reads as a warm-up and not as a bug.
+                    "reference_status": (
+                        STATUS_READY if reference is not None else STATUS_COLLECTING
+                    ),
+                    "reference_days": (
+                        self._history.coverage_days(self._asin) if self._history else 0
+                    ),
+                    "reference_days_required": HISTORY_MIN_DAYS,
+                }
+            )
+
+        return attributes
 
     @property
     def device_info(self) -> DeviceInfo:

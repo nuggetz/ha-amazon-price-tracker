@@ -172,3 +172,34 @@ AVAILABILITY_SELECTOR = "#availability span"
 # Wishlist — matches both /hz/wishlist/ls/ and legacy /gp/registry/wishlist/ URLs
 # Group 1 = marketplace suffix (e.g. "it", "co.uk"), Group 2 = wishlist ID
 WISHLIST_ID_RE = r"amazon\.([a-z.]+)/(?:hz/wishlist/ls|gp/registry/wishlist)/([A-Z0-9]{10,})"
+
+# --- Price history ---------------------------------------------------------
+#
+# One store for the whole integration, not one per product: an entry is a
+# single ASIN, so a file each would mean N files and N writes per refresh
+# cycle for what is a handful of floats.
+STORAGE_KEY = f"{DOMAIN}.history"
+STORAGE_VERSION = 1
+HISTORY = "history"
+
+# Samples are aggregated to one value per day before they enter the window.
+# Six fetches in a day are not six observations — a price barely moves within a
+# day — so counting raw samples would read "180 data points" where there are 30.
+# Aggregating also means a day with extra fetches (force_refresh, a restart)
+# does not weigh more than a quiet one.
+HISTORY_WINDOW_DAYS = 30
+# Days that must actually carry data before a percentage threshold is armed.
+# Only days with a price count: if Amazon walls us for a week, those days do not
+# exist and do not bring the threshold closer to arming, which is the point —
+# what is missing is information, not elapsed time.
+HISTORY_MIN_DAYS = 14
+
+# How the user expressed the alert threshold. Derived from which of the two
+# settings is filled in, never stored: one stored mode that could disagree with
+# the values is one more thing that can lie.
+MODE_ABSOLUTE = "absolute"
+MODE_PERCENT = "percent"
+
+# extra_state_attributes: why a percentage threshold is or is not active.
+STATUS_READY = "ready"
+STATUS_COLLECTING = "collecting"
