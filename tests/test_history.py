@@ -122,3 +122,59 @@ async def test_history_survives_a_reload(hass, hass_storage):
     await second.async_load()
 
     assert second.reference_price(ASIN, now=today) == 100.0
+
+
+async def test_removing_the_only_product_forgets_it(hass, hass_storage):
+    """Home Assistant unloads an entry before it removes it.
+
+    With one product tracked, the unload takes the integration's data down with
+    it — so the removal has to still find the history, or "remove and re-add"
+    stops being the reset the README promises.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.amazon_price_tracker.const import (
+        DOMAIN,
+        HISTORY,
+        STORAGE_KEY,
+    )
+
+    page = (
+        "<html><body><span id='productTitle'>Test Product</span>"
+        "<div id='corePriceDisplay_desktop_feature_div'>"
+        "<span class='a-offscreen'>€ 299,99</span></div></body></html>"
+    )
+    response = MagicMock(text=page, status_code=200)
+    response.raise_for_status = MagicMock()
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Product",
+        data={
+            "asin": ASIN,
+            "name": "Test Product",
+            "marketplace": "amazon.it",
+            "alert_threshold": None,
+        },
+        unique_id=ASIN,
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.amazon_price_tracker.session.AmazonSession.async_get",
+        AsyncMock(return_value=response),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    # Writes are normally coalesced; force the pending one out to disk so the
+    # test is looking at the stored history and not at memory.
+    await hass.data[DOMAIN][HISTORY].async_flush()
+    assert ASIN in hass_storage[STORAGE_KEY]["data"]
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert ASIN not in hass_storage[STORAGE_KEY]["data"]
