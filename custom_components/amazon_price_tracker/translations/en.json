@@ -22,7 +22,7 @@
           "name": "Name shown in Home Assistant",
           "marketplace": "Amazon website to track the price on (e.g. amazon.com, amazon.de)",
           "alert_threshold": "Price below which you want to trigger automations",
-          "alert_discount_pct": "Alternative to the fixed threshold above — set one or the other, not both. 15 means \"alert when the price is 15% below what this product usually costs\", measured as the median of the last 30 days."
+          "alert_discount_pct": "15 means \"alert when the price is 15% below what this product usually costs\", measured as the median of the last 30 days. Can be set on its own or next to the fixed threshold above, in which case the alert fires on whichever the price reaches first."
         }
       },
       "import_wishlist": {
@@ -36,7 +36,7 @@
         "data_description": {
           "url": "Full URL of the public wishlist. The wishlist must be set to Public on Amazon.",
           "alert_threshold": "Threshold applied to all imported products. Can be changed per-product later.",
-          "alert_discount_pct": "Alternative to the fixed threshold above — set one or the other, not both. Applied to every imported product and changeable per product later."
+          "alert_discount_pct": "Applied to every imported product and changeable per product later. Can be set on its own or next to the fixed threshold above, in which case the alert fires on whichever the price reaches first."
         }
       }
     },
@@ -47,8 +47,7 @@
       "invalid_wishlist_url": "Invalid wishlist URL. Make sure you copy the full URL of a public Amazon wishlist.",
       "wishlist_not_found": "Wishlist not found or set to Private on Amazon.",
       "wishlist_empty": "No products found in the wishlist. It may be empty or set to Private.",
-      "amazon_blocked": "Amazon is currently blocking requests from your IP address. Wait a while and try again.",
-      "both_thresholds": "Set either a fixed threshold or a percentage, not both — they are two ways of saying the same thing."
+      "amazon_blocked": "Amazon is currently blocking requests from your IP address. Wait a while and try again."
     },
     "abort": {
       "already_configured": "This ASIN is already configured.",
@@ -68,12 +67,9 @@
         "data_description": {
           "name": "Name shown in Home Assistant",
           "alert_threshold": "Leave empty to remove the threshold. Prices on {marketplace} are in {currency}.",
-          "alert_discount_pct": "Alternative to the fixed threshold — set one or the other, not both. 15 means \"alert when the price is 15% below the usual price\". Leave empty to remove it."
+          "alert_discount_pct": "15 means \"alert when the price is 15% below the usual price\". Can be set on its own or next to the fixed threshold, in which case the alert fires on whichever the price reaches first. Leave empty to remove it."
         }
       }
-    },
-    "error": {
-      "both_thresholds": "Set either a fixed threshold or a percentage, not both — they are two ways of saying the same thing."
     }
   }
 }

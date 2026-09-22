@@ -83,19 +83,6 @@ _STEP_WISHLIST_SCHEMA = vol.Schema(
 )
 
 
-def _both_thresholds_set(user_input: dict[str, Any]) -> bool:
-    """The two thresholds are alternatives, and which one is set is the mode.
-
-    Storing an explicit mode alongside them would allow a saved mode that
-    disagrees with the saved values; refusing the ambiguous input instead means
-    the configuration can only ever say one thing.
-    """
-    return (
-        user_input.get("alert_threshold") is not None
-        and user_input.get("alert_discount_pct") is not None
-    )
-
-
 def _validate_asin(raw: str) -> str:
     asin = raw.strip().upper()
     if not _ASIN_RE.match(asin):
@@ -127,9 +114,6 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            if _both_thresholds_set(user_input):
-                errors["base"] = "both_thresholds"
-
             try:
                 asin = _validate_asin(user_input["asin"])
             except ValueError:
@@ -139,7 +123,7 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 marketplace = user_input.get("marketplace", DEFAULT_MARKETPLACE)
-                if not errors and not await self._check_reachable(asin, marketplace):
+                if not await self._check_reachable(asin, marketplace):
                     errors["base"] = "cannot_connect"
 
             if not errors:
@@ -173,9 +157,7 @@ class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             alert_threshold: float | None = user_input.get("alert_threshold")
             alert_discount_pct: float | None = user_input.get("alert_discount_pct")
 
-            if _both_thresholds_set(user_input):
-                errors["base"] = "both_thresholds"
-            elif not (wishlist_match := _WISHLIST_RE.search(url)):
+            if not (wishlist_match := _WISHLIST_RE.search(url)):
                 errors["url"] = "invalid_wishlist_url"
             else:
                 marketplace_suffix = wishlist_match.group(1).lower()
@@ -270,7 +252,6 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
         current_name = self._config_entry.options.get(
             "name", self._config_entry.data["name"]
         )
@@ -282,24 +263,18 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
-            if _both_thresholds_set(user_input):
-                errors["base"] = "both_thresholds"
-            else:
-                name = user_input["name"].strip()
-                # Both keys are always written, including as None: falling back
-                # to entry.data on a missing key would resurrect the threshold
-                # the user has just cleared.
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        "name": name,
-                        "alert_threshold": user_input.get("alert_threshold"),
-                        "alert_discount_pct": user_input.get("alert_discount_pct"),
-                    },
-                )
-            current_name = user_input.get("name", current_name)
-            current_threshold = user_input.get("alert_threshold")
-            current_discount = user_input.get("alert_discount_pct")
+            name = user_input["name"].strip()
+            # Both keys are always written, including as None: falling back to
+            # entry.data on a missing key would resurrect the threshold the user
+            # has just cleared.
+            return self.async_create_entry(
+                title=name,
+                data={
+                    "name": name,
+                    "alert_threshold": user_input.get("alert_threshold"),
+                    "alert_discount_pct": user_input.get("alert_discount_pct"),
+                },
+            )
 
         # The threshold is compared against the sensor's own value, which is in
         # the marketplace's currency — never converted. Issue #9: the label used
@@ -325,7 +300,6 @@ class AmazonPriceTrackerOptionsFlow(config_entries.OptionsFlow):
                     ): _DISCOUNT_PCT,
                 }
             ),
-            errors=errors,
             description_placeholders={
                 "marketplace": marketplace,
                 "currency": currency,

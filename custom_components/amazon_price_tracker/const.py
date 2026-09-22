@@ -199,6 +199,9 @@ HISTORY_MIN_DAYS = 14
 # the values is one more thing that can lie.
 MODE_ABSOLUTE = "absolute"
 MODE_PERCENT = "percent"
+# Both set: the alert is whichever of the two is reached first, so the amount
+# compared against is the higher of them.
+MODE_BOTH = "both"
 
 # extra_state_attributes: why a percentage threshold is or is not active.
 STATUS_READY = "ready"
