@@ -22,7 +22,7 @@
           "name": "Nome che verrà mostrato in Home Assistant",
           "marketplace": "Sito Amazon su cui monitorare il prezzo (es. amazon.it, amazon.de)",
           "alert_threshold": "Prezzo sotto cui vuoi ricevere un alert tramite automazioni",
-          "alert_discount_pct": "Alternativa alla soglia fissa qui sopra — imposta l'una o l'altra, non entrambe. 15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale del prodotto\", calcolato come mediana degli ultimi 30 giorni."
+          "alert_discount_pct": "15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale del prodotto\", calcolato come mediana degli ultimi 30 giorni. Puoi impostarla da sola o insieme alla soglia fissa qui sopra: in quel caso l'alert scatta su quella che il prezzo raggiunge per prima."
         }
       },
       "import_wishlist": {
@@ -36,7 +36,7 @@
         "data_description": {
           "url": "URL completo della lista desideri pubblica. La lista deve essere impostata come Pubblica su Amazon.",
           "alert_threshold": "Soglia applicata a tutti i prodotti importati. Modificabile singolarmente in seguito.",
-          "alert_discount_pct": "Alternativa alla soglia fissa qui sopra — imposta l'una o l'altra, non entrambe. Viene applicata a ogni prodotto importato e resta modificabile prodotto per prodotto."
+          "alert_discount_pct": "Viene applicata a ogni prodotto importato e resta modificabile prodotto per prodotto. Puoi impostarla da sola o insieme alla soglia fissa qui sopra: in quel caso l'alert scatta su quella che il prezzo raggiunge per prima."
         }
       }
     },
@@ -47,8 +47,7 @@
       "invalid_wishlist_url": "URL della lista desideri non valido. Assicurati di copiare l'URL completo della lista pubblica Amazon.",
       "wishlist_not_found": "Lista desideri non trovata o impostata come Privata su Amazon.",
       "wishlist_empty": "Nessun prodotto trovato nella lista. La lista potrebbe essere vuota o privata.",
-      "amazon_blocked": "Amazon sta bloccando le richieste dal tuo indirizzo IP. Attendi un po' e riprova.",
-      "both_thresholds": "Imposta o una soglia fissa o una percentuale, non entrambe: sono due modi di dire la stessa cosa."
+      "amazon_blocked": "Amazon sta bloccando le richieste dal tuo indirizzo IP. Attendi un po' e riprova."
     },
     "abort": {
       "already_configured": "Questo ASIN è già configurato.",
@@ -68,12 +67,9 @@
         "data_description": {
           "name": "Nome che verrà mostrato in Home Assistant",
           "alert_threshold": "Lascia vuoto per rimuovere la soglia. I prezzi su {marketplace} sono in {currency}.",
-          "alert_discount_pct": "Alternativa alla soglia fissa — imposta l'una o l'altra, non entrambe. 15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale\". Lascia vuoto per rimuoverla."
+          "alert_discount_pct": "15 significa \"avvisami quando il prezzo è il 15% sotto quello abituale\". Puoi impostarla da sola o insieme alla soglia fissa: in quel caso l'alert scatta su quella che il prezzo raggiunge per prima. Lascia vuoto per rimuoverla."
         }
       }
-    },
-    "error": {
-      "both_thresholds": "Imposta o una soglia fissa o una percentuale, non entrambe: sono due modi di dire la stessa cosa."
     }
   }
 }

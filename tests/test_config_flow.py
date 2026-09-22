@@ -307,13 +307,13 @@ async def test_options_flow_updates_name_and_threshold(
 
 
 # ---------------------------------------------------------------------------
-# Thresholds: a fixed amount or a percentage, never both (issue #10)
+# Thresholds: a fixed amount, a percentage, or both (issue #10, forum request)
 # ---------------------------------------------------------------------------
 
-async def test_add_product_rejects_two_thresholds(
+async def test_add_product_stores_two_thresholds(
     hass: HomeAssistant, mock_setup_entry, mock_reachable
 ):
-    """Which field is filled in *is* the mode, so both filled has no meaning."""
+    """Both together are the two-thresholds mode, not an ambiguous input."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -331,9 +331,9 @@ async def test_add_product_rejects_two_thresholds(
         },
     )
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "both_thresholds"}
-    assert not hass.config_entries.async_entries(DOMAIN)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["alert_threshold"] == 199.99
+    assert result["data"]["alert_discount_pct"] == 15
 
 
 async def test_add_product_stores_a_percentage(
@@ -392,9 +392,10 @@ async def test_options_flow_swaps_a_fixed_threshold_for_a_percentage(
     assert result["data"]["alert_threshold"] is None
 
 
-async def test_options_flow_rejects_two_thresholds(
+async def test_options_flow_adds_a_percentage_next_to_a_threshold(
     hass: HomeAssistant, mock_setup_entry, mock_reachable
 ):
+    """The forum ask: keep the target price, add "or a big discount" to it."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -413,5 +414,6 @@ async def test_options_flow_rejects_two_thresholds(
         {"name": "Test Product", "alert_threshold": 10.0, "alert_discount_pct": 20},
     )
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "both_thresholds"}
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["alert_threshold"] == 10.0
+    assert result["data"]["alert_discount_pct"] == 20

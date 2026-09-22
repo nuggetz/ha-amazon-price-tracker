@@ -19,6 +19,7 @@ from custom_components.amazon_price_tracker.const import (
     COORDINATORS,
     DOMAIN,
     EVENT_PRICE_DROP,
+    HISTORY,
     HISTORY_MIN_DAYS,
     STATUS_COLLECTING,
     STATUS_READY,
@@ -268,3 +269,99 @@ async def test_a_fixed_threshold_gains_no_attributes(hass, events):
     assert "reference_status" not in state.attributes
     assert "discount_pct" not in state.attributes
     assert state.attributes["alert_threshold"] == 200.0
+
+
+# ---------------------------------------------------------------------------
+# A fixed threshold and a percentage together (forum request)
+# ---------------------------------------------------------------------------
+
+def _arm_history(hass, daily_price, days=HISTORY_MIN_DAYS):
+    """Give an already-running product a usual price.
+
+    `_seed_history` seeds the store before setup; this changes the reference
+    while the sensor is alive, which is the only way to exercise the moment a
+    percentage arms. It writes the loaded record directly because the day in
+    progress never counts towards the window — samples fed in now would land in
+    it and change nothing.
+    """
+    today = dt_util.utcnow().date()
+    hass.data[DOMAIN][HISTORY]._data["B09FKN79QR"] = {
+        "days": {
+            (today - timedelta(days=offset)).isoformat(): daily_price
+            for offset in range(1, days + 1)
+        },
+        "pending_day": None,
+        "pending": [],
+    }
+
+
+async def test_either_threshold_fires_the_alert(hass, events, hass_storage):
+    """Both set means whichever comes first, so the higher one is the one to beat."""
+    _seed_history(hass_storage, 300.0)
+
+    entry = await _setup(hass, threshold=200.0, discount=20, price="299,99")
+    assert events == []
+
+    # A 20% discount, nowhere near the 200 target price.
+    await _refresh(hass, entry, "239,99")
+
+    assert len(events) == 1
+    data = events[0].data
+    assert data["price"] == 239.99
+    assert data["alert_threshold"] == 240.0
+    assert data["threshold_mode"] == "both"
+    assert data["fixed_threshold"] == 200.0
+    assert data["discount_threshold"] == 240.0
+
+
+async def test_the_fixed_threshold_works_while_the_percentage_collects(hass, events):
+    """The reason setting both is allowed: no two-week silence on the fixed one."""
+    entry = await _setup(hass, threshold=200.0, discount=20, price="299,99")
+
+    await _refresh(hass, entry, "199,99")
+
+    assert len(events) == 1
+    data = events[0].data
+    assert data["alert_threshold"] == 200.0
+    assert data["discount_threshold"] is None
+    assert data["reference_price"] is None
+    assert data["threshold_mode"] == "both"
+
+
+async def test_arming_the_percentage_does_not_re_announce(hass, events):
+    """The resolved threshold rises when the reference lands. That is not a drop."""
+    entry = await _setup(hass, threshold=200.0, discount=20, price="299,99")
+    await _refresh(hass, entry, "189,99")
+    assert len(events) == 1
+
+    # 240 now, where it was 200 — and the price has not moved.
+    _arm_history(hass, 300.0)
+    await _refresh(hass, entry, "189,99")
+
+    assert len(events) == 1
+
+
+async def test_arming_the_percentage_widens_the_alert(hass, events):
+    """A price that is a real discount but misses the target price still counts."""
+    entry = await _setup(hass, threshold=200.0, discount=20, price="299,99")
+    await _refresh(hass, entry, "229,99")
+    assert events == []
+
+    _arm_history(hass, 300.0)
+    await _refresh(hass, entry, "229,99")
+
+    assert len(events) == 1
+    assert events[0].data["alert_threshold"] == 240.0
+
+
+async def test_two_thresholds_show_both_amounts(hass, events, hass_storage):
+    """`alert_threshold` is the higher one, so the fixed amount needs saying too."""
+    _seed_history(hass_storage, 300.0)
+
+    await _setup(hass, threshold=200.0, discount=20, price="299,99")
+
+    state = hass.states.get("sensor.test_product")
+    assert state.attributes["threshold_mode"] == "both"
+    assert state.attributes["alert_threshold"] == 240.0
+    assert state.attributes["fixed_threshold"] == 200.0
+    assert state.attributes["reference_status"] == STATUS_READY

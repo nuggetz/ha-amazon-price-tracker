@@ -22,6 +22,7 @@ from .const import (
     EVENT_PRICE_DROP,
     HISTORY_MIN_DAYS,
     MODE_ABSOLUTE,
+    MODE_BOTH,
     MODE_PERCENT,
     STATUS_COLLECTING,
     STATUS_READY,
@@ -67,8 +68,9 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
         self._alert_threshold: float | None = entry.options.get(
             "alert_threshold", entry.data.get("alert_threshold")
         )
-        # A percentage below the product's usual price, as an alternative to the
-        # absolute threshold above. The config flow refuses to set both.
+        # A percentage below the product's usual price. It can stand on its own
+        # or sit next to the absolute threshold above, in which case the alert
+        # is whichever of the two the price reaches first.
         self._discount_pct: float | None = entry.options.get(
             "alert_discount_pct", entry.data.get("alert_discount_pct")
         )
@@ -125,24 +127,43 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             self._check_alert_threshold(price)
         super()._handle_coordinator_update()
 
+    @property
+    def _discount_threshold(self) -> float | None:
+        """The percentage as an amount of money, or None while it cannot be."""
+        if self._discount_pct is None:
+            return None
+        if (reference := self._reference_price) is None:
+            return None
+        return round(reference * (1 - self._discount_pct / 100), 2)
+
     def _resolve_threshold(self) -> float | None:
         """The threshold as an amount of money, whatever the user configured.
 
         A percentage is resolved against the reference price and handed to the
         same crossing check as a fixed amount — the alert has one mechanism, not
-        one per kind of threshold. None means "do not evaluate": no threshold
-        set, or a percentage one whose reference is not ready yet.
+        one per kind of threshold. With both set the alert is whichever comes
+        first, and "price below either" is "price below the higher of the two",
+        so two thresholds still collapse into the single amount the crossing
+        check compares against.
+
+        None means "do not evaluate": nothing set, or nothing usable yet — a
+        percentage whose reference is still collecting. A fixed threshold
+        alongside it keeps working throughout that wait, which is the reason
+        setting both is worth allowing at all.
         """
-        if self._discount_pct is None:
-            return self._alert_threshold
-
-        if (reference := self._reference_price) is None:
+        candidates = [
+            candidate
+            for candidate in (self._alert_threshold, self._discount_threshold)
+            if candidate is not None
+        ]
+        if not candidates:
             return None
-
-        return round(reference * (1 - self._discount_pct / 100), 2)
+        return max(candidates)
 
     @property
     def _threshold_mode(self) -> str | None:
+        if self._alert_threshold is not None and self._discount_pct is not None:
+            return MODE_BOTH
         if self._discount_pct is not None:
             return MODE_PERCENT
         if self._alert_threshold is not None:
@@ -194,6 +215,11 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                 "currency": self._attr_native_unit_of_measurement,
                 "alert_threshold": threshold,
                 "threshold_mode": self._threshold_mode,
+                # The two configured thresholds as money, so an automation can
+                # tell which one the price actually reached. `alert_threshold`
+                # stays the amount compared against.
+                "fixed_threshold": self._alert_threshold,
+                "discount_threshold": self._discount_threshold,
                 "reference_price": self._reference_price,
                 "discount_pct": self._discount_pct,
                 "min_price": self._min_price,
@@ -238,7 +264,7 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
             reference = self._reference_price
             attributes.update(
                 {
-                    "threshold_mode": MODE_PERCENT,
+                    "threshold_mode": self._threshold_mode,
                     "discount_pct": self._discount_pct,
                     "reference_price": reference,
                     # Says out loud why an alert is not armed yet, so a quiet
@@ -252,6 +278,11 @@ class AmazonPriceSensor(CoordinatorEntity[AmazonPriceCoordinator], RestoreSensor
                     "reference_days_required": HISTORY_MIN_DAYS,
                 }
             )
+            # Only when both are set: `alert_threshold` is then the higher of
+            # the two, so the fixed amount would otherwise be invisible exactly
+            # when it is not the one being compared against.
+            if self._alert_threshold is not None:
+                attributes["fixed_threshold"] = self._alert_threshold
 
         return attributes
 
