@@ -40,7 +40,7 @@ Each product is exposed as a sensor whose state is the current price. Price hist
 | amazon.fr | EUR |
 | amazon.es | EUR |
 | amazon.nl | EUR |
-| amazon.be | EUR |
+| amazon.com.be | EUR |
 | amazon.pl | PLN |
 | amazon.se | SEK |
 | amazon.co.uk | GBP |
