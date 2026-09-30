@@ -111,3 +111,46 @@ async def test_a_wall_puts_the_whole_marketplace_in_cooldown(hass, entry):
     # A second product on the same marketplace is refused without a request
     with pytest.raises(AmazonBlockedError):
         await session.async_get("https://www.amazon.it/dp/B0D6NMDNNX")
+
+
+async def test_an_amazon_be_entry_moves_to_amazon_com_be(hass):
+    """amazon.be is not Amazon (issue #13); saved entries must follow the rename."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Belgian Product",
+        data={
+            "asin": "B09FKN79QR",
+            "name": "Belgian Product",
+            "marketplace": "amazon.be",
+            "alert_threshold": None,
+        },
+        unique_id="B09FKN79QR",
+        version=1,
+        minor_version=1,
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.amazon_price_tracker.session.AmazonSession.async_get",
+        AsyncMock(return_value=_response(BLOCKED_PAGE)),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.minor_version == 2
+    assert entry.data["marketplace"] == "amazon.com.be"
+    assert "amazon.com.be" in hass.data[DOMAIN][SESSIONS]
+
+
+async def test_migration_leaves_other_marketplaces_alone(hass, entry):
+    hass.config_entries.async_update_entry(entry, minor_version=1)
+
+    with patch(
+        "custom_components.amazon_price_tracker.session.AmazonSession.async_get",
+        AsyncMock(return_value=_response(BLOCKED_PAGE)),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.minor_version == 2
+    assert entry.data["marketplace"] == "amazon.it"

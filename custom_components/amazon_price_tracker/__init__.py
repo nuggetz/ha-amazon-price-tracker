@@ -42,6 +42,28 @@ _IMPORT_WISHLIST_SCHEMA = vol.Schema(
 )
 _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
+# Marketplace keys that were wrong when they shipped. amazon.be is not Amazon —
+# the Belgian store is amazon.com.be (issue #13) — so an entry saved with the
+# old key has never fetched a real page.
+_RENAMED_MARKETPLACES = {"amazon.be": "amazon.com.be"}
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if entry.version > 1:
+        return False
+
+    if entry.minor_version < 2:
+        data = dict(entry.data)
+        old = data.get("marketplace")
+        if old in _RENAMED_MARKETPLACES:
+            data["marketplace"] = _RENAMED_MARKETPLACES[old]
+            _LOGGER.info(
+                "Moved %s from %s to %s", entry.data.get("asin"), old, data["marketplace"]
+            )
+        hass.config_entries.async_update_entry(entry, data=data, minor_version=2)
+
+    return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data = hass.data.setdefault(DOMAIN, {})

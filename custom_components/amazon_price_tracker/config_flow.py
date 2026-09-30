@@ -39,7 +39,7 @@ _COUNTRY_TO_MARKETPLACE: dict[str, str] = {
     "FR": "amazon.fr",
     "ES": "amazon.es",
     "NL": "amazon.nl",
-    "BE": "amazon.be",
+    "BE": "amazon.com.be",
     "PL": "amazon.pl",
     "SE": "amazon.se",
     "GB": "amazon.co.uk",
@@ -92,6 +92,7 @@ def _validate_asin(raw: str) -> str:
 
 class AmazonPriceTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2
 
     @staticmethod
     @callback
