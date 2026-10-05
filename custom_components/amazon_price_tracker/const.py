@@ -136,6 +136,35 @@ NO_FEATURED_OFFER_SELECTORS = [
     "#buybox a[href*='/gp/offer-listing/']",
 ]
 
+# Amazon converts prices into the visitor's currency when it thinks they are
+# abroad (issue #15: amazon.co.jp from a European IP shows euros). The cookie a
+# browser sets when you pick a currency asks for the marketplace's own instead.
+CURRENCY_COOKIE = "i18n-prefs"
+
+# What a price string can tell us about its currency, checked in this order so
+# that "R$" is read before "$". A bare "$" is every dollar we serve; a bare
+# "¥" is JPY or CNY. Anything not listed is "can't tell", never "foreign".
+CURRENCY_MARKERS: list[tuple[str, frozenset[str]]] = [
+    ("R$", frozenset({"BRL"})),
+    ("S$", frozenset({"SGD"})),
+    ("A$", frozenset({"AUD"})),
+    ("AU$", frozenset({"AUD"})),
+    ("C$", frozenset({"CAD"})),
+    ("CA$", frozenset({"CAD"})),
+    ("MX$", frozenset({"MXN"})),
+    ("US$", frozenset({"USD"})),
+    ("€", frozenset({"EUR"})),
+    ("£", frozenset({"GBP"})),
+    ("￥", frozenset({"JPY", "CNY"})),
+    ("¥", frozenset({"JPY", "CNY"})),
+    ("₹", frozenset({"INR"})),
+    ("₺", frozenset({"TRY"})),
+    ("zł", frozenset({"PLN"})),
+    ("kr", frozenset({"SEK", "NOK", "DKK"})),
+    ("TL", frozenset({"TRY"})),
+    ("$", frozenset({"USD", "CAD", "AUD", "MXN", "SGD"})),
+]
+
 TITLE_SELECTORS = [
     "#productTitle",
     "#title span",
