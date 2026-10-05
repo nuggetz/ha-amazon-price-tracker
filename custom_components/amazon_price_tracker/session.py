@@ -31,6 +31,7 @@ from homeassistant.core import Event, HomeAssistant
 from .const import (
     BLOCK_COOLDOWN_JITTER,
     BLOCK_COOLDOWN_SECONDS,
+    CURRENCY_COOKIE,
     DEFAULT_MARKETPLACE,
     DOMAIN,
     DOMAIN_CONFIG,
@@ -131,6 +132,17 @@ class AmazonSession:
         if (wait := spacing - elapsed) > 0:
             await asyncio.sleep(wait)
 
+    def _pin_currency(self, client: httpx.AsyncClient) -> None:
+        """Ask for the marketplace's currency, not the one Amazon infers from the IP.
+
+        Set before every request, not once: Amazon may answer with its own
+        `i18n-prefs` for the visitor's country, which would replace ours.
+        """
+        config = DOMAIN_CONFIG.get(self.marketplace, DOMAIN_CONFIG[DEFAULT_MARKETPLACE])
+        client.cookies.set(
+            CURRENCY_COOKIE, config["currency"], domain=f".{self.marketplace}", path="/"
+        )
+
     async def _async_warm_up(self, client: httpx.AsyncClient) -> None:
         """Load the homepage once to pick up session cookies."""
         if self._warmed:
@@ -138,6 +150,7 @@ class AmazonSession:
         # Marked warmed up front: a failed warm-up must not retry on every
         # product, and the product request works without cookies anyway.
         self._warmed = True
+        self._pin_currency(client)
         try:
             await client.get(self.home_url)
         except httpx.HTTPError as err:
@@ -173,6 +186,7 @@ class AmazonSession:
             await self._async_warm_up(client)
             await self._async_space_requests()
 
+            self._pin_currency(client)
             response = await client.get(
                 url,
                 headers={

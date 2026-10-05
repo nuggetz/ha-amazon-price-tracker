@@ -6,6 +6,7 @@ from custom_components.amazon_price_tracker.coordinator import (
     parse_price,
     parse_product_page,
     parse_wishlist_page,
+    price_currencies,
 )
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,28 @@ def test_parse_price_us(raw, expected):
     assert parse_price(raw, european_format=False) == expected
 
 
+def test_parse_price_full_width_yen():
+    """amazon.co.jp writes the yen sign full-width."""
+    assert parse_price("￥1,980", european_format=False) == 1980.0
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("€ 1.299,99", {"EUR"}),
+    ("299,99 EUR", {"EUR"}),
+    ("￥1,980", {"JPY", "CNY"}),
+    ("R$ 99,90", {"BRL"}),
+    ("S$12.90", {"SGD"}),
+    ("$12.99", {"USD", "CAD", "AUD", "MXN", "SGD"}),
+    ("1 299,00 zł", {"PLN"}),
+    ("AED 99.00", {"AED"}),
+    ("EUR245.30", {"EUR"}),
+    ("12,34", None),
+])
+def test_price_currencies(raw, expected):
+    codes = price_currencies(raw)
+    assert (set(codes) if codes is not None else None) == expected
+
+
 @pytest.mark.parametrize("raw", ["N/A", "", "unavailable", "—"])
 def test_parse_price_invalid(raw):
     assert parse_price(raw, european_format=True) is None
@@ -294,6 +317,87 @@ def test_parse_product_page_unanchored_fallback_stays_in_product_block():
         HTML_UNANCHORED_PRICE_IN_PPD, "B07HFFR4PH", european_format=True
     )
     assert price == 68.0
+
+# Issue #15: amazon.co.jp seen from a European IP converts every price to euros.
+HTML_JP_IN_EUR_JSONLD = """
+<html><body>
+<span id="productTitle">ソニー ワイヤレスヘッドホン</span>
+<script type="application/ld+json">
+{"@type": "Product", "name": "ソニー ワイヤレスヘッドホン",
+ "offers": {"@type": "Offer", "price": "245.30", "priceCurrency": "EUR"}}
+</script>
+<div id="corePriceDisplay_desktop_feature_div">
+  <span class="a-offscreen">€245.30</span>
+</div>
+<div id="availability"><span>In stock</span></div>
+</body></html>
+"""
+
+HTML_JP_IN_EUR_CSS = """
+<html><body>
+<span id="productTitle">ソニー ワイヤレスヘッドホン</span>
+<div id="corePriceDisplay_desktop_feature_div">
+  <span class="a-offscreen">€245.30</span>
+</div>
+<div id="ppd"><span class="a-price"><span class="a-offscreen">€245.30</span></span></div>
+</body></html>
+"""
+
+HTML_JP_IN_EUR_COMPOSITE = """
+<html><body>
+<span id="productTitle">ソニー ワイヤレスヘッドホン</span>
+<span class="a-price"><span class="a-price-symbol">€</span>
+<span class="a-price-whole">245.</span><span class="a-price-fraction">30</span></span>
+</body></html>
+"""
+
+HTML_JP_IN_YEN = """
+<html><body>
+<span id="productTitle">ソニー ワイヤレスヘッドホン</span>
+<div id="corePriceDisplay_desktop_feature_div">
+  <span class="a-offscreen">￥39,600</span>
+</div>
+</body></html>
+"""
+
+
+@pytest.mark.parametrize("html", [
+    HTML_JP_IN_EUR_JSONLD, HTML_JP_IN_EUR_CSS, HTML_JP_IN_EUR_COMPOSITE,
+])
+def test_parse_product_page_rejects_a_price_in_another_currency(html, caplog):
+    """A converted price is discarded, never relabelled: 245 EUR is not 245 JPY."""
+    price, title, is_available, avail_text = parse_product_page(
+        html, "B0TEST12AB", european_format=False, currency="JPY"
+    )
+    assert price is None
+    assert title == "ソニー ワイヤレスヘッドホン"
+    assert avail_text == "Price shown in EUR, not JPY"
+    # Not a layout change: it must not push users to open an issue
+    assert "Could not parse price" not in caplog.text
+
+
+def test_parse_product_page_accepts_the_marketplace_currency():
+    price, _, _, _ = parse_product_page(
+        HTML_JP_IN_YEN, "B0TEST12AB", european_format=False, currency="JPY"
+    )
+    assert price == 39600.0
+
+
+def test_parse_product_page_accepts_a_price_that_does_not_name_a_currency():
+    """Only a price that positively says otherwise is foreign."""
+    price, _, _, _ = parse_product_page(
+        HTML_FRACTION_FALLBACK, "B0TEST12AB", european_format=True, currency="EUR"
+    )
+    assert price == 149.99
+
+
+def test_parse_product_page_ambiguous_dollar_is_accepted_for_any_dollar():
+    html = HTML_JP_IN_YEN.replace("￥39,600", "$12.99")
+    price, _, _, _ = parse_product_page(
+        html, "B0TEST12AB", european_format=False, currency="CAD"
+    )
+    assert price == 12.99
+
 
 # ---------------------------------------------------------------------------
 # parse_wishlist_page

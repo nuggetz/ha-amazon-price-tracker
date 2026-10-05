@@ -24,6 +24,7 @@ def session(hass):
     client = AsyncMock()
     client.is_closed = False
     client.get = AsyncMock(return_value=MagicMock(status_code=200))
+    client.cookies = httpx.Cookies()
     session._client = client
     return session
 
@@ -66,6 +67,40 @@ async def test_failed_warm_up_does_not_block_the_product_request(session):
         response = await session.async_get("https://www.amazon.it/dp/B09FKN79QR")
 
     assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Currency (issue #15)
+# ---------------------------------------------------------------------------
+
+async def test_requests_ask_for_the_marketplace_currency(hass):
+    session = AmazonSession(hass, "amazon.co.jp")
+    client = AsyncMock()
+    client.is_closed = False
+    client.cookies = httpx.Cookies()
+    seen: list[str | None] = []
+
+    async def _get(url, **kwargs):
+        seen.append(client.cookies.get("i18n-prefs", domain=".amazon.co.jp"))
+        return MagicMock(status_code=200)
+
+    client.get = _get
+    session._client = client
+    with patch("custom_components.amazon_price_tracker.session.asyncio.sleep"):
+        await session.async_get("https://www.amazon.co.jp/dp/B09FKN79QR")
+
+    # Both the warm-up and the product request carry it
+    assert seen == ["JPY", "JPY"]
+
+
+async def test_currency_is_pinned_again_after_amazon_overrides_it(session):
+    with patch("custom_components.amazon_price_tracker.session.asyncio.sleep"):
+        await session.async_get("https://www.amazon.it/dp/AAAAAAAAAA")
+        # What a Set-Cookie for a visitor Amazon places in the US would leave
+        session._client.cookies.set("i18n-prefs", "USD", domain=".amazon.it", path="/")
+        await session.async_get("https://www.amazon.it/dp/BBBBBBBBBB")
+
+    assert session._client.cookies.get("i18n-prefs", domain=".amazon.it") == "EUR"
 
 
 # ---------------------------------------------------------------------------

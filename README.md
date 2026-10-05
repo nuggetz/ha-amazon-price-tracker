@@ -344,6 +344,8 @@ Event data:
   goes under the threshold, not on every refresh while it stays there. It re-arms
   when the price goes back above, or when the product stops having a price at all.
 - Thresholds are always in the marketplace's own currency. Nothing is converted.
+  If Amazon shows a product in another currency, that price is not used at all —
+  see [Troubleshooting](#a-product-on-a-foreign-marketplace-stays-unknown).
 
 ### Percentage thresholds
 
@@ -430,6 +432,18 @@ with several products the last one can take a couple of minutes to populate.
 Setup is deliberately never failed when Amazon is blocking, because that would
 hand control to Home Assistant's setup-retry ladder, which retries far more
 aggressively than the integration's own backoff.
+
+### A product on a foreign marketplace stays `unknown`
+
+Amazon converts prices into the visitor's currency when it thinks they are
+abroad — amazon.co.jp seen from Europe shows euros. The integration asks every
+marketplace for its own currency, but if Amazon still answers in another one the
+price is discarded rather than shown with the wrong unit: 245 € is not 245 ¥, and
+recording it would also corrupt the minimum, the history and the alerts. The
+sensor's `availability_text` then reads `Price shown in EUR, not JPY`.
+
+If you added the product before 0.6.2, its `min_price` and price history may
+already hold converted values. Remove the product and add it again to start clean.
 
 ### `Could not parse price for ASIN … on what looks like a real product page`
 

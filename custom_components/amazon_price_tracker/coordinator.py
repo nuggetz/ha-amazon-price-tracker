@@ -17,6 +17,7 @@ from .const import (
     BASE_INTERVAL_SECONDS,
     BASE_URL,
     BOT_WALL_SIGNALS,
+    CURRENCY_MARKERS,
     DEFAULT_MARKETPLACE,
     DOMAIN,
     DOMAIN_CONFIG,
@@ -36,7 +37,14 @@ from .session import AmazonSession, async_get_session
 
 _LOGGER = logging.getLogger(__name__)
 
-_CURRENCY_SYMBOLS = ("€", "£", "$", "¥", "kr", "zł", "EUR", "GBP", "USD", "JPY", "CAD", "AUD", "PLN", "SEK")
+# Bounded by letters only: "EUR245.30" must still read as EUR.
+_ISO_CURRENCY_RE = re.compile(
+    r"(?<![A-Za-z])("
+    + "|".join(
+        sorted({c["currency"] for c in DOMAIN_CONFIG.values()} | {"CNY", "NOK", "DKK", "CHF"})
+    )
+    + r")(?![A-Za-z])"
+)
 _ASIN_IN_HREF_RE = re.compile(r"/dp/([A-Z0-9]{10})")
 _WISHLIST_RE = re.compile(WISHLIST_ID_RE, re.IGNORECASE)
 
@@ -47,15 +55,14 @@ def parse_price(raw: str, european_format: bool = True) -> float | None:
     european_format=True : dots are thousands separators, comma is decimal (1.299,99)
     european_format=False: commas are thousands separators, dot is decimal (1,299.99)
     """
-    cleaned = raw.strip()
-    for sym in _CURRENCY_SYMBOLS:
-        cleaned = cleaned.replace(sym, "")
-    cleaned = cleaned.strip()
+    # Keep only digits and separators: currency markers vary per marketplace
+    # (amazon.co.jp writes a full-width "￥") and none of them is part of the number.
+    cleaned = re.sub(r"[^\d.,]", "", raw)
 
     if european_format:
-        cleaned = cleaned.replace(" ", "").replace(".", "").replace(",", ".")
+        cleaned = cleaned.replace(".", "").replace(",", ".")
     else:
-        cleaned = cleaned.replace(",", "").replace(" ", "")
+        cleaned = cleaned.replace(",", "")
 
     try:
         return float(cleaned)
@@ -63,12 +70,35 @@ def parse_price(raw: str, european_format: bool = True) -> float | None:
         return None
 
 
+def price_currencies(raw: str) -> frozenset[str] | None:
+    """Return the currencies a price string can be in, or None if it doesn't say."""
+    if match := _ISO_CURRENCY_RE.search(raw):
+        return frozenset({match.group(1)})
+    for marker, codes in CURRENCY_MARKERS:
+        if marker in raw:
+            return codes
+    return None
+
+
+def _foreign_currency(codes: frozenset[str] | None, currency: str | None) -> str | None:
+    """Name the currency a price is shown in, when it is not the marketplace's.
+
+    A price that doesn't say which currency it is in is accepted: only a price
+    that positively says otherwise is foreign.
+    """
+    if currency is None or codes is None or currency in codes:
+        return None
+    return "/".join(sorted(codes))
+
+
 def parse_product_page(
-    html: str, asin: str, european_format: bool = True
+    html: str, asin: str, european_format: bool = True, currency: str | None = None
 ) -> tuple[float | None, str | None, bool, str | None]:
     """Parse an Amazon product page.
 
     Returns (price, title, is_available, availability_text).
+    With `currency`, a price the page shows in another currency is discarded,
+    never relabelled: 1000 EUR is not 1000 JPY.
     Runs synchronously — must be called via async_add_executor_job.
     Raises AmazonCaptchaError if Amazon served an anti-bot wall or any other
     non-product page instead of the listing.
@@ -106,6 +136,8 @@ def parse_product_page(
 
     price: float | None = None
     title: str | None = None
+    # Set when a price was found but shown in another currency (issue #15).
+    foreign: str | None = None
 
     # --- Strategy 1: JSON-LD (most stable) ---
     for script in soup.find_all("script", type="application/ld+json"):
@@ -125,9 +157,16 @@ def parse_product_page(
             raw_price = offers.get("price")
             if raw_price is not None:
                 try:
-                    price = float(str(raw_price).replace(",", "."))
+                    candidate = float(str(raw_price).replace(",", "."))
                 except (ValueError, TypeError):
-                    pass
+                    candidate = None
+                raw_currency = offers.get("priceCurrency")
+                codes = frozenset({str(raw_currency).upper()}) if raw_currency else None
+                if candidate is not None:
+                    if shown := _foreign_currency(codes, currency):
+                        foreign = shown
+                    else:
+                        price = candidate
             if price is not None:
                 break
         except (json.JSONDecodeError, AttributeError, StopIteration):
@@ -138,18 +177,28 @@ def parse_product_page(
         for selector in PRICE_SELECTORS:
             el = soup.select_one(selector)
             if el:
-                candidate = parse_price(el.get_text(strip=True), european_format)
-                if candidate is not None:
-                    price = candidate
-                    break
+                text = el.get_text(strip=True)
+                candidate = parse_price(text, european_format)
+                if candidate is None:
+                    continue
+                if shown := _foreign_currency(price_currencies(text), currency):
+                    foreign = shown
+                    continue
+                price = candidate
+                break
 
     # --- Strategy 2b: any price node, but only inside the product's block ---
     if price is None and product_root is not None:
         for el in product_root.select(PRICE_FALLBACK_SELECTOR):
-            candidate = parse_price(el.get_text(strip=True), european_format)
-            if candidate is not None:
-                price = candidate
-                break
+            text = el.get_text(strip=True)
+            candidate = parse_price(text, european_format)
+            if candidate is None:
+                continue
+            if shown := _foreign_currency(price_currencies(text), currency):
+                foreign = shown
+                continue
+            price = candidate
+            break
 
     # --- Strategy 2c: composite whole + fraction fallback, same scope ---
     if price is None:
@@ -163,10 +212,18 @@ def parse_product_page(
                 whole = whole.replace(".", "").replace(",", "").replace(" ", "")
             else:
                 whole = whole.replace(",", "").replace(" ", "")
+            price_el = whole_el.find_parent(class_="a-price")
+            symbol_el = price_el.select_one(".a-price-symbol") if price_el else None
+            codes = price_currencies(symbol_el.get_text(strip=True)) if symbol_el else None
             try:
-                price = float(f"{whole}.{frac}")
+                candidate = float(f"{whole}.{frac}")
             except ValueError:
-                pass
+                candidate = None
+            if candidate is not None:
+                if shown := _foreign_currency(codes, currency):
+                    foreign = shown
+                else:
+                    price = candidate
 
     # --- Title fallback ---
     if title is None:
@@ -187,7 +244,23 @@ def parse_product_page(
             f"({len(html)} bytes, no title, no price)"
         )
 
-    if price is None and no_featured_offer:
+    if price is None and foreign is not None:
+        # Amazon converted the price for a visitor it thinks is abroad. The
+        # number is real but in the wrong currency, and the sensor's unit, the
+        # thresholds and the history are all in the marketplace's: report no
+        # price rather than a relabelled one.
+        availability_text = f"Price shown in {foreign}, not {currency}"
+        _LOGGER.info(
+            "Amazon showed ASIN %s in %s instead of %s, probably because it "
+            "located this Home Assistant outside the marketplace's country. The "
+            "price is not recorded; the sensor stays unknown until Amazon shows "
+            "%s again.",
+            asin,
+            foreign,
+            currency,
+            currency,
+        )
+    elif price is None and no_featured_offer:
         # Nothing is wrong with the page or the parser: Amazon has withdrawn the
         # buy box for this listing, so there is no price to read. Mark it
         # unavailable — the sensor goes unknown, which beats a stale or foreign
@@ -326,7 +399,11 @@ class AmazonPriceCoordinator(DataUpdateCoordinator[dict]):
         try:
             price, title, is_available, availability_text = (
                 await self.hass.async_add_executor_job(
-                    parse_product_page, response.text, self.asin, european_format
+                    parse_product_page,
+                    response.text,
+                    self.asin,
+                    european_format,
+                    self._market_config["currency"],
                 )
             )
         except AmazonBlockedError as err:
